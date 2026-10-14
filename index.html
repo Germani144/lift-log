@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-nLkGcGkFoN0Xou1b5Y0WF1kmx//IzyLrgfnmuXgu5hQ='; style-src 'unsafe-inline'; img-src data:; manifest-src blob:; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Sn9CzskN3aTciTHegQFD79pXjJcnna57UEN80jC0RqM='; style-src 'unsafe-inline'; img-src data:; manifest-src blob:; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <title>Lift Log</title>
@@ -11,7 +11,7 @@
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding-top:env(safe-area-inset-top)}
-main{padding:12px 12px 90px;max-width:560px;margin:auto}
+main{padding:12px 12px 150px;max-width:560px;margin:auto}
 h2{margin:8px 0 12px;font-size:22px}
 .m{color:var(--m);font-size:13px}.wr{color:var(--wr);font-weight:600}
 .hd,.row{display:flex;gap:8px;align-items:center;justify-content:space-between}
@@ -32,12 +32,17 @@ label{display:block;font-size:13px;color:var(--m);margin:6px 0}
 .ck{height:40px;border-radius:20px;border:2px solid var(--ac);background:none;color:var(--ac);font-size:18px;cursor:pointer}
 .ck.on{background:var(--ac);color:var(--on)}
 .inf{grid-column:1/-1;font-size:12px;color:var(--m);display:flex;justify-content:space-between;align-items:center;min-height:16px}
+.rest{position:fixed;left:12px;right:12px;bottom:calc(62px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:center;background:var(--c);border:1px solid var(--bd);border-radius:12px;padding:8px;box-shadow:0 2px 10px #0003;z-index:5;max-width:536px;margin:auto}
+.rest .s{width:56px;flex:none}
+.rt{flex:1;height:44px;border:0;background:none;font:700 26px system-ui;font-variant-numeric:tabular-nums;color:var(--fg);cursor:pointer}
+.rt.run{color:var(--ac)}.rt.go{color:var(--wr)}
+.bar{height:6px;background:var(--bd);border-radius:3px;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;background:var(--ac)}
 .lk{border:0;background:none;color:var(--m);font-size:12px;text-decoration:underline;cursor:pointer;padding:6px 0}
 .inf label{margin:0;display:flex;gap:4px;align-items:center}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--c);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;padding:14px 0;border:0;background:none;font-size:15px;cursor:pointer;color:var(--m)}
 nav button.on{color:var(--ac);font-weight:700}
-#toast{position:fixed;left:12px;right:12px;bottom:calc(70px + env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:12px;border-radius:8px;z-index:9}
+#toast{position:fixed;left:12px;right:12px;bottom:calc(135px + env(safe-area-inset-bottom));background:var(--fg);color:var(--bg);padding:12px;border-radius:8px;z-index:9}
 code{background:var(--bg);padding:1px 4px;border-radius:4px}
 .hl{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd);font-variant-numeric:tabular-nums}
 .hl button{border:0;background:none;color:var(--m);cursor:pointer}
@@ -78,7 +83,7 @@ const saveW=()=>{try{localStorage.setItem('w',JSON.stringify(W))}catch{}};
 const EX=id=>S.ex.find(e=>e.id==id);
 async function load(){
  S.ex=await all('exercises');S.tpl=await all('templates');S.sets=await all('sets');S.pr={};
- S.tpl.forEach(t=>{if(!t.days){t.days=[{name:'Day 1',items:t.items||[]}];delete t.items}});
+ S.tpl.forEach(t=>{if(!t.weeks)t.weeks=8;if(!t.days){t.days=[{name:'Day 1',items:t.items||[]}];delete t.items}});
  (await all('pr_history')).sort((a,b)=>a.t-b.t).forEach(p=>S.pr[p.exId]=p)}  // latest tested PR per exercise
 
 /* ---------- %1RM template lines: "3*80%x5" = 3 sets of 5 reps at 80% of tested 1RM ---------- */
@@ -111,7 +116,7 @@ async function addItem(it){const ex=EX(it.exId);if(!ex)return;
  W.items.push({exId:ex.id,rows,hint})}
 
 async function start(tid,day=0){const t=tid?S.tpl.find(x=>x.id==tid):null,dy=t&&t.days[day];
- W={sess:Date.now(),name:dy?`${t.name} · ${dy.name}`:'Quick workout',pd:dy?`${t.id}:${day}`:undefined,items:[]};
+ W={sess:Date.now(),name:dy?`${t.name} · ${dy.name}`:'Quick workout',pd:dy?`${t.id}:${day}`:undefined,rest:+lg('rest')||120,restEnd:0,items:[]};
  if(dy)for(const it of dy.items)await addItem(it);
  saveW();render()}
 
@@ -141,16 +146,39 @@ function card(it,i){const ex=EX(it.exId);if(!ex)return'';const pr=S.pr[ex.id];
 function lastBackup(){try{return +localStorage.getItem('lb')||0}catch{return 0}}
 function nag(){const lb=lastBackup();
  return S.sets.length&&Date.now()-lb>6048e5?`<div class=card><span class=wr>Back up your data</span><div class=m>${lb?'Last backup '+age(lb):'No backup yet'}. Clearing browser data erases your history.</div><button class=b data-a=backup>Export backup</button></div>`:''}
-const weekStart=()=>{const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime()};
-function rPlan(t){const mine=S.sets.filter(s=>s.pd&&s.pd.startsWith(t.id+':')),wk=mine.filter(s=>s.sess>=weekStart()),
-  dn=new Set(wk.map(s=>+s.pd.split(':')[1])),last=mine.reduce((a,b)=>!a||b.t>a.t?b:a,null),
-  nx=last?(+last.pd.split(':')[1]+1)%t.days.length:0;
- return`<div class=card><div class=hd><b>${esc(t.name)}</b><span class=m>${new Set(wk.map(s=>s.sess)).size}/${t.days.length} this week</span></div>`+
-  t.days.map((d,k)=>`<button class="b big" data-a=start data-i=${t.id} data-d=${k}>${dn.has(k)?'✓ ':''}${esc(d.name)}${k==nx?' · next':''}<small>${d.items.map(i=>esc(EX(i.exId)?.name||'?')).join(', ')||'No exercises'}</small></button>`).join('')+`</div>`}
+function planRun(t){const dpw=t.days.length,seen=new Map();
+ S.sets.filter(s=>s.pd&&s.pd.startsWith(t.id+':')&&s.sess>=t.runStart).sort((a,b)=>a.t-b.t).forEach(s=>{if(!seen.has(s.sess))seen.set(s.sess,+s.pd.split(':')[1])});
+ const days=[...seen.values()],total=days.length,need=t.weeks*dpw;
+ return{total,need,done:total>=need,wk:Math.min(Math.floor(total/dpw)+1,t.weeks),wdays:new Set(days.slice(Math.floor(total/dpw)*dpw)),nx:total?(days[total-1]+1)%dpw:0}}
+function rPlan(t){
+ if(!t.active)return`<div class=card><div class=hd><b>${esc(t.name)}</b><span class=m>${t.days.length} days/week · ${t.weeks} weeks</span></div><button class=b data-a=planStart data-i=${t.id}>Start plan</button></div>`;
+ const p=planRun(t);
+ return`<div class=card><div class=hd><b>${esc(t.name)}</b><span class=m>${p.done?'Complete':`Week ${p.wk} of ${t.weeks}`}</span></div><div class=bar><i style="width:${Math.min(100,p.total/p.need*100).toFixed(1)}%"></i></div>`+
+  (p.done?`<p>Plan complete: all ${t.weeks} weeks done.</p><div class=row><button class="b p" data-a=planStart data-i=${t.id}>Restart</button><button class=b data-a=planStop data-i=${t.id}>Close</button></div>`
+  :t.days.map((d,k)=>`<button class="b big" data-a=start data-i=${t.id} data-d=${k}>${p.wdays.has(k)?'✓ ':''}${esc(d.name)}${k==p.nx?' · next':''}<small>${d.items.map(i=>esc(EX(i.exId)?.name||'?')).join(', ')||'No exercises'}</small></button>`).join('')+`<button class=lk data-a=planStop data-i=${t.id}>End plan early</button>`)+`</div>`}
+
+/* ---------- rest timer ---------- */
+let AC,alarmedFor=0;
+const fmtT=x=>Math.floor(x/60)+':'+String(x%60).padStart(2,'0');
+function restText(){const rem=W.restEnd?W.restEnd-Date.now():0;return W.restEnd&&rem<=0?'Go!':fmtT(W.restEnd?Math.ceil(rem/1000):W.rest)}
+function restCls(){return'rt'+(W.restEnd?(W.restEnd-Date.now()>0?' run':' go'):'')}
+const restBar=()=>`<div class=rest><button class=s data-a=rdec>−15</button><button id=rt class="${restCls()}" data-a=redit>${restText()}</button><button class=s data-a=rinc>+15</button><button class=s data-a=rstop>✕</button></div>`;
+function startRest(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();AC.resume?.()}catch{}W.restEnd=Date.now()+(W.rest||120)*1000;saveW()}
+function alarm(){try{navigator.vibrate?.([250,120,250])}catch{}
+ try{if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(AC.destination);o.frequency.value=880;g.gain.value=.25;o.start();o.stop(AC.currentTime+.6)}catch{}}
+function setRest(n){n=Math.min(1800,Math.max(15,n));const d=n-W.rest;W.rest=n;
+ if(W.restEnd&&W.restEnd>Date.now())W.restEnd+=d*1000;ls('rest',n);saveW();tickRest()}
+function tickRest(){if(!W)return;
+ if(W.restEnd){const rem=W.restEnd-Date.now();if(rem<=0&&rem>-4000&&alarmedFor!==W.restEnd){alarmedFor=W.restEnd;alarm()}}
+ const b=$('#rt');if(b){b.textContent=restText();b.className=restCls()}}
+setInterval(tickRest,250);
+
 function rTrain(){
- if(!W)return`<h2>Train</h2>`+nag()+(S.tpl.map(rPlan).join('')||'<p class=m>No plans yet. Build one in Plans, or start a quick workout.</p>')+`<button class=b data-a=start>Quick workout</button>`;
+ if(!W){const ps=[...S.tpl.filter(t=>t.active),...S.tpl.filter(t=>!t.active)];
+  return`<h2>Train</h2>`+nag()+(ps.map(rPlan).join('')||'<p class=m>No plans yet. Build one in Plans, or start a quick workout.</p>')+`<button class=b data-a=start>Quick workout</button>`}
+ if(!W.rest)W.rest=+lg('rest')||120;
  return`<div class=hd><h2>${esc(W.name)}</h2><button class="b p" data-a=finish>Finish</button></div>`+W.items.map(card).join('')+
- (S.ex.length?`<div class=row><select id=sx>${opts()}</select><button class=b data-a=addx>Add exercise</button></div>`:'<p class=m>Create exercises first.</p>')}
+ (S.ex.length?`<div class=row><select id=sx>${opts()}</select><button class=b data-a=addx>Add exercise</button></div>`:'<p class=m>Create exercises first.</p>')+restBar()}
 
 function rEx(){return`<h2>Exercises</h2>`+S.ex.map(e=>{const p=S.pr[e.id];
  return`<button class="b big" data-a=exOpen data-i=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · increment ${e.inc}${p?` · PR ${fmt(p.w)} (${age(p.t)})`:''}</small></button>`}).join('')+`<button class="b p" data-a=exNew>New exercise</button>
@@ -192,7 +220,7 @@ function rHist(){const g={};S.sets.forEach(s=>(g[s.sess]??=[]).push(s));
   ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div class=hl style="display:block"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>vol ${fmt(V(xs))}</span></div><div class=m>${xs.map(s=>`${fmt(s.w)}×${s.r}${s.rir!=null?' @'+fmt(s.rir):''}${s.test?' ★':''}`).join(' · ')}</div></div>`}).join('')+
   `<button class=b data-a=wdel data-i=${k}>Delete workout</button></div>`}).join('')||'<p class=m>No workouts logged yet. Sets appear here as soon as you tap ○.</p>')}
 
-function rTpl(){return`<h2>Plans</h2>`+S.tpl.map(t=>`<button class="b big" data-a=tplEdit data-i=${t.id}>${esc(t.name)}<small>${t.days.length} day${t.days.length>1?'s':''}/week · ${t.days.map(d=>esc(d.name)).join(', ')}</small></button>`).join('')+`<button class="b p" data-a=tplNew>New weekly plan</button>`}
+function rTpl(){return`<h2>Plans</h2>`+S.tpl.map(t=>`<button class="b big" data-a=tplEdit data-i=${t.id}>${esc(t.name)}<small>${t.days.length} day${t.days.length>1?'s':''}/week · ${t.weeks} weeks${t.active?' · active':''} · ${t.days.map(d=>esc(d.name)).join(', ')}</small></button>`).join('')+`<button class="b p" data-a=tplNew>New weekly plan</button>`}
 
 function resizeDays(n){const d=E.days;
  if(n<d.length&&d.slice(n).some(x=>x.items.length)&&!confirm('Remove the extra days and their exercises?')){render();return}
@@ -200,7 +228,7 @@ function resizeDays(n){const d=E.days;
 
 function rTple(){const dpw=[1,2,3,4,5,6,7].map(n=>`<option ${n==E.days.length?'selected':''}>${n}</option>`).join('');
  return`<button class=b data-a=back>‹ Back</button><label>Plan name<input data-b=name value="${esc(E.name)}"></label>
- <label>Days per week<select data-dpw>${dpw}</select></label>
+ <div class=row><label>Days per week<select data-dpw>${dpw}</select></label><label>Number of weeks<input type=number min=1 data-n data-b=weeks value="${E.weeks??8}"></label></div>
  <p class=m>RIR exercises: set the number of sets, and optionally a rep range or target RIR for that day (blank = the exercise's default). % of 1RM exercises: one line per group of sets, e.g. <code>3*80%x5</code> = 3 sets of 5 reps at 80% of your tested 1RM.</p>`+
  E.days.map((dy,k)=>`<div class=card><label>Day ${k+1} name<input data-b="days.${k}.name" value="${esc(dy.name)}"></label>`+
   dy.items.map((it,j)=>{const ex=EX(it.exId),b=`days.${k}.items.${j}`,f=(x,l)=>`<label>${l}<input type=number step=any data-n data-b="${b}.${x}" value="${it[x]??''}" placeholder="${ex?ex[x]??'':''}"></label>`;
@@ -235,6 +263,19 @@ const A={
  start:(s,d)=>start(+d.i||null,+d.d||0),
  finish:async()=>{if(confirm('Finish workout?')){W=null;saveW();await load();render()}},
  addx:async()=>{await addItem({exId:+$('#sx').value,n:3});saveW();render()},
+ rdec:()=>setRest(W.rest-15),
+ rinc:()=>setRest(W.rest+15),
+ rstop:()=>{W.restEnd=0;saveW();tickRest()},
+ redit:()=>{const v=prompt('Rest time (seconds or m:ss)',fmtT(W.rest));if(v==null)return;
+  const m=v.trim().match(/^(\d+):(\d{1,2})$/),n=m?+m[1]*60+ +m[2]:+v;
+  n>=15&&n<=1800?setRest(n):toast('Enter 15–1800 seconds, or m:ss')},
+ planStart:async(s,d)=>{const t=S.tpl.find(x=>x.id==d.i),o=S.tpl.find(x=>x.active&&x.id!=t.id);
+  if(o&&!confirm(`Switch from "${o.name}" to "${t.name}"? The current plan will be closed.`))return;
+  if(o){o.active=false;await put('templates',o)}
+  t.active=true;t.runStart=Date.now();await put('templates',t);await load();render()},
+ planStop:async(s,d)=>{const t=S.tpl.find(x=>x.id==d.i);
+  if(!planRun(t).done&&!confirm('End this plan now? Your logged workouts stay in History.'))return;
+  t.active=false;await put('templates',t);await load();render()},
  rms:async s=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j];
   if(r.done&&!confirm('Remove this logged set?'))return;
   if(r.id)await del('sets',r.id);
@@ -250,7 +291,7 @@ const A={
   if(!(r.w>0&&r.r>0))return toast('Enter weight and reps');
   if(r.test&&r.r!=1)return toast('A 1RM test must be a single (1 rep).');
   const rec={exId:ex.id,sess:W.sess,wn:W.name,pd:W.pd,t:Date.now(),w:r.w,r:r.r,rir:hasR(r)?r.rir:null,test:!!r.test};
-  r.id=await put('sets',rec);r.done=true;saveW();
+  r.id=await put('sets',rec);r.done=true;saveW();startRest();
   const x=info(r,ex),pr=S.pr[ex.id];
   if(r.test){if(confirm(`Save ${fmt(r.w)} as new PR for ${ex.name}?`+(pr?`\nCurrent: ${fmt(pr.w)} (tested ${age(pr.t)})`:''))){
     await put('pr_history',{exId:ex.id,w:r.w,t:rec.t,setId:r.id});await load()}}
@@ -271,11 +312,11 @@ const A={
  prDel:async(s,d)=>{await del('pr_history',+d.i);await loadEx(E.id)},
  wdel:async(s,d)=>{if(!confirm('Delete this workout?'))return;for(const x of S.sets.filter(x=>x.sess==d.i))await del('sets',x.id);await load();render()},
  sdel:async(s,d)=>{await del('sets',+d.i);await loadEx(E.id)},
- tplNew:()=>{E={name:'',days:[{name:'Day 1',items:[]}]};S.view={t:'tple'};render()},
+ tplNew:()=>{E={name:'',weeks:8,days:[{name:'Day 1',items:[]}]};S.view={t:'tple'};render()},
  tplEdit:(s,d)=>{E=structuredClone(S.tpl.find(t=>t.id==d.i));S.view={t:'tple'};render()},
  tplAdd:(s,d)=>{if(!S.ex.length)return toast('Create an exercise first');E.days[+d.i].items.push({exId:S.ex[0].id,n:3,text:''});render()},
  tplDelItem:(s,d)=>{E.days[+d.k].items.splice(+d.i,1);render()},
- tplSave:async()=>{if(!E.name.trim())return toast('Name required');
+ tplSave:async()=>{if(!E.name.trim())return toast('Name required');E.weeks=Math.min(52,Math.max(1,Math.round(+E.weeks||8)));
   for(const dy of E.days){if(!dy.name.trim())dy.name='Day';
    for(const it of dy.items){const ex=EX(it.exId);if(ex?.mode=='pct')for(const l of (it.text||'').split('\n'))
     if(parse(l)===null)return toast(`Can't read "${l}" in ${ex.name}`)}}
@@ -299,7 +340,7 @@ function clean(d){
  return{t:opt(d.t)??Date.now(),
   exercises:arr(d,'exercises').map(e=>{if(!['rir','pct'].includes(e.mode))throw new Error('bad mode');
    return{id:num(e.id,'id'),name:str(e.name,'name'),mode:e.mode,inc:num(e.inc,'inc'),lo:opt(e.lo),hi:opt(e.hi),rir:opt(e.rir)}}),
-  templates:arr(d,'templates').map(t=>({id:num(t.id,'id'),name:str(t.name,'name'),days:arr(Array.isArray(t.days)?t:{days:[{name:'Day 1',items:t.items}]},'days',14).map(y=>({name:str(y.name,'name'),items:arr(y,'items',200).map(i=>({exId:num(i.exId,'exId'),n:opt(i.n),lo:opt(i.lo),hi:opt(i.hi),rir:opt(i.rir),text:typeof i.text=='string'?i.text.slice(0,2000):''}))}))})),
+  templates:arr(d,'templates').map(t=>({id:num(t.id,'id'),name:str(t.name,'name'),weeks:opt(t.weeks),active:t.active===true,runStart:opt(t.runStart),days:arr(Array.isArray(t.days)?t:{days:[{name:'Day 1',items:t.items}]},'days',14).map(y=>({name:str(y.name,'name'),items:arr(y,'items',200).map(i=>({exId:num(i.exId,'exId'),n:opt(i.n),lo:opt(i.lo),hi:opt(i.hi),rir:opt(i.rir),text:typeof i.text=='string'?i.text.slice(0,2000):''}))}))})),
   pr_history:arr(d,'pr_history').map(p=>({id:num(p.id,'id'),exId:num(p.exId,'exId'),w:num(p.w,'w'),t:num(p.t,'t'),setId:opt(p.setId)})),
   sets:arr(d,'sets').map(s=>({id:num(s.id,'id'),exId:num(s.exId,'exId'),sess:num(s.sess,'sess'),t:num(s.t,'t'),w:num(s.w,'w'),r:num(s.r,'r'),rir:s.rir==null?null:num(s.rir,'rir'),test:s.test===true,wn:typeof s.wn=='string'?s.wn.slice(0,100):undefined,pd:typeof s.pd=='string'&&/^\d+:\d+$/.test(s.pd)?s.pd:undefined}))}}
 async function importData(f){if(!f)return;let d;
