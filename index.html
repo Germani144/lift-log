@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-U7aSZWhKcGdeSZPBJxwE1XcS9w3NXxJyGqK/oXXOyjI='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DehXWHKAhqpuwaSqlVAD0DoNc3zRRGRev6j+9FqARXo='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <link rel="manifest" href="manifest.webmanifest">
@@ -31,6 +31,8 @@ label{display:block;font-size:13px;color:var(--m);margin:6px 0}
 .set{display:grid;grid-template-columns:34px minmax(0,1.5fr) 34px minmax(0,1fr) minmax(0,1fr) 44px;gap:4px;align-items:center;margin:8px 0;font-variant-numeric:tabular-nums}
 .set input{text-align:center;padding:10px 2px}
 .set.dn{opacity:.55}
+.set.hdr{margin:10px 0 0;font-size:11px;color:var(--m);text-align:center;font-variant-numeric:normal}
+.set.hdr span{white-space:nowrap}
 .s{height:40px;border:1px solid var(--bd);background:var(--c);border-radius:8px;cursor:pointer}
 .ck{height:40px;border-radius:20px;border:2px solid var(--ac);background:none;color:var(--ac);font-size:18px;cursor:pointer}
 .ck.on{background:var(--ac);color:var(--on)}
@@ -69,6 +71,7 @@ let tt;const toast=m=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearT
 const pct=(r,rir)=>1/(1+(r+rir)/30);  // %1RM from reps + RIR
 const e1=(w,r,rir)=>w/pct(r,rir);
 const hasR=r=>r.rir!==''&&r.rir!=null;
+const isTest=r=>+r.r===1&&hasR(r)&&+r.rir===0;   // 1 rep at 0 RIR counts as a 1RM
 const rnd=(x,i)=>i>0?+(Math.round(x/i)*i).toFixed(3):+(+x).toFixed(2);  // increment 0 = no rounding (bodyweight)
 const wt=w=>w>0?fmt(w):'BW';
 
@@ -134,8 +137,9 @@ async function start(tid,day=0){const t=tid?S.tpl.find(x=>x.id==tid):null,dy=t&&
 /* ---------- row info: e1RM + PR check ---------- */
 function info(r,ex){const pr=S.pr[ex.id];
  if(!(r.w>0&&r.r>0&&hasR(r)))return{s:'',w:0};
+ if(isTest(r)){let s='Counts as a 1RM';if(pr){const d=(r.w/pr.w-1)*100;s+=` · ${d>=0?'+':''}${d.toFixed(1)}% vs 1RM`}return{s,w:0}}
  const e=e1(r.w,r.r,r.rir);let s='e1RM '+fmt(e);
- if(pr&&!(r.test&&r.r==1)){const d=(e/pr.w-1)*100;s+=` · ${d>=0?'+':''}${d.toFixed(1)}% vs PR`;if(d>3)return{s:'⚠ '+s,w:1}}
+ if(pr){const d=(e/pr.w-1)*100;s+=` · ${d>=0?'+':''}${d.toFixed(1)}% vs 1RM`;if(d>3)return{s:'⚠ '+s,w:1}}
  return{s,w:0}}
 function updInfo(s){const it=W.items[s.dataset.i],x=info(it.rows[s.dataset.j],EX(it.exId)),sp=$('.inf span',s);
  sp.textContent=x.s;sp.className=x.w?'wr':''}
@@ -144,14 +148,14 @@ function updInfo(s){const it=W.items[s.dataset.i],x=info(it.rows[s.dataset.j],EX
 const opts=id=>S.ex.map(x=>`<option value="${x.id}" ${x.id==id?'selected':''}>${esc(x.name)}</option>`).join('');
 
 function card(it,i){const ex=EX(it.exId);if(!ex)return'';const pr=S.pr[ex.id];
- let h=`<div class=card><div class=hd><b style="flex:1">${esc(ex.name)}</b><span class=m>${pr?`PR ${fmt(pr.w)} · ${age(pr.t)}`:ex.mode=='pct'?'no PR':''}</span><button class=s style="width:40px" data-a=rmx data-i=${i} aria-label="Remove exercise">×</button></div><div class=m>${esc(it.hint||'')}</div>`;
- h+=it.rows.map((r,j)=>{const x=info(r,ex),d=r.done?'disabled':'';
+ let h=`<div class=card><div class=hd><b style="flex:1">${esc(ex.name)}</b><span class=m>${pr?`1RM ${fmt(pr.w)} · ${age(pr.t)}`:ex.mode=='pct'?'no 1RM':''}</span><button class=s style="width:40px" data-a=rmx data-i=${i} aria-label="Remove exercise">×</button></div><div class=m>${esc(it.hint||'')}</div>`;
+ h+=`<div class="set hdr"><span></span><span>Weight (kg)</span><span></span><span>Reps</span><span>RIR</span><span></span></div>`+it.rows.map((r,j)=>{const x=info(r,ex),d=r.done?'disabled':'';
   return`<div class="set ${r.done?'dn':''}" data-i=${i} data-j=${j}>
-  <button class=s data-a=step data-d=-1 ${d}>−</button><input data-f=w inputmode=decimal placeholder=kg value="${fmt(r.w)}" ${d}>
+  <button class=s data-a=step data-d=-1 ${d}>−</button><input data-f=w inputmode=decimal placeholder=kg aria-label="Weight in kg" value="${fmt(r.w)}" ${d}>
   <button class=s data-a=step data-d=1 ${d}>+</button>
-  <input data-f=r inputmode=numeric placeholder=reps value="${fmt(r.r)}" ${d}><input data-f=rir inputmode=decimal placeholder=RIR value="${fmt(r.rir)}" ${d}>
+  <input data-f=r inputmode=numeric placeholder=reps aria-label=Reps value="${fmt(r.r)}" ${d}><input data-f=rir inputmode=decimal placeholder=RIR aria-label="Reps in reserve" value="${fmt(r.rir)}" ${d}>
   <button class="ck ${r.done?'on':''}" data-a=${r.done?'undo':'log'}>${r.done?'✓':'○'}</button>
-  <div class=inf><span class="${x.w?'wr':''}">${x.s}</span><div style="display:flex;gap:14px;align-items:center"><button class=lk data-a=rms>Remove set</button><label><input type=checkbox data-f=test ${r.test?'checked':''} ${d}> 1RM test</label></div></div></div>`}).join('');
+  <div class=inf><span class="${x.w?'wr':''}">${x.s}</span><button class=lk data-a=rms>Remove set</button></div></div>`}).join('');
  return h+`<button class=b data-a=addset data-i=${i}>+ Set</button></div>`}
 
 function lastBackup(){try{return +localStorage.getItem('lb')||0}catch{return 0}}
@@ -192,7 +196,7 @@ function rTrain(){
  (S.ex.length?`<div class=row><select id=sx>${opts()}</select><button class=b data-a=addx>Add exercise</button></div>`:'<p class=m>Create exercises first.</p>')+restBar()}
 
 function rEx(){return`<h2>Exercises</h2>`+S.ex.map(e=>{const p=S.pr[e.id];
- return`<button class="b big" data-a=exOpen data-i=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · ${e.inc>0?'increment '+e.inc:'bodyweight'}${p?` · PR ${fmt(p.w)} (${age(p.t)})`:''}</small></button>`}).join('')+`<button class="b p" data-a=exNew>New exercise</button>
+ return`<button class="b big" data-a=exOpen data-i=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · ${e.inc>0?'increment '+e.inc:'bodyweight'}${p?` · 1RM ${fmt(p.w)} (${age(p.t)})`:''}${e.pb?` · PB ${fmt(e.pb)}`:''}</small></button>`}).join('')+`<button class="b p" data-a=exNew>New exercise</button>
  ${ghCard()}
  <div class=card><b>Manual backup</b><div class=m>${lastBackup()?'Last backup '+age(lastBackup()):'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
  <div class=row><button class=b data-a=backup>Export</button><button class=b data-a=restore>Import</button></div><input type=file id=imp accept=".json,application/json" hidden></div>`}
@@ -204,15 +208,17 @@ function spark(l,v){if(v.length<2)return'';const mx=Math.max(...v),mn=Math.min(.
  const pts=v.map((y,i)=>`${(i/(v.length-1)*280+10).toFixed(1)},${(46-(y-mn)/R*40).toFixed(1)}`).join(' ');
  return`<div class=m style="margin-top:8px">${l}: ${fmt(v[0])} → ${fmt(v[v.length-1])}</div><svg viewBox="0 0 300 52" width="100%" height="52"><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="2"/></svg>`}
 
-function rExd(){const e=E,n=k=>`type=number step=any data-n data-b=${k} value="${e[k]??''}"`;
+function rExd(){const e=E;if(e.cur===undefined)e.cur=e.id?S.pr[e.id]?.w??'':'';const n=k=>`type=number step=any data-n data-b=${k} value="${e[k]??''}"`;
  let h=`<button class=b data-a=back>‹ Back</button><div class=card>
  <label>Name<input data-b=name value="${esc(e.name)}"></label>
  <label>Tracking<select data-b=mode data-rr><option value=rir ${e.mode=='rir'?'selected':''}>RIR + weight + reps (auto-suggest)</option><option value=pct ${e.mode=='pct'?'selected':''}>% of tested 1RM × reps</option></select></label>
- <label>Weight increment (0 = bodyweight)<input ${n('inc')}></label>`+
+ <label>Weight increment (0 = bodyweight)<input ${n('inc')}></label>
+ <div class=row><label>Current 1RM (kg)<input ${n('cur')}></label><label>Lifetime PB (kg)<input ${n('pb')}></label></div>
+ <div class=m>Current 1RM sets your % weights. Lifetime PB is your best ever, and it rises on its own when you beat it.</div>`+
  (e.mode=='rir'?`<div class=row><label>Reps min<input ${n('lo')}></label><label>Reps max<input ${n('hi')}></label><label>Target RIR<input ${n('rir')}></label></div>`:'')+
  `<div class=row><button class="b p" data-a=exSave>Save</button>${e.id?'<button class=b data-a=exDel>Delete</button>':''}</div></div>`;
  if(!e.id)return h;
- h+=`<div class=card><b>Tested 1RM history</b><div class=m>Latest entry is the current PR.</div>`+
+ h+=`<div class=card><b>Tested 1RM history</b><div class=m>Latest entry is your current 1RM.</div>`+
  (S.prl.map((p,k)=>`<div class=hl><span>${fmt(p.w)} · ${dstr(p.t)} <span class=m>${age(p.t)}${k==0?' · current':''}</span></span><button data-a=prDel data-i=${p.id}>×</button></div>`).join('')||'<p class=m>None yet.</p>')+
  `<div class=row><input id=prw type=number step=any inputmode=decimal placeholder="Tested 1RM"><input id=prd type=date value="${new Date().toISOString().slice(0,10)}"><button class=b data-a=prAdd>Add PR</button></div></div>`;
  const ses=sessions(S.hist);
@@ -321,27 +327,36 @@ const A={
   r.w=Math.max(0,rnd((+r.w||0)+ +d.d*(EX(it.exId).inc||2),.001));$('[data-f=w]',s).value=fmt(r.w);saveW();updInfo(s)},
  log:async s=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j],ex=EX(it.exId);
   if(!(r.r>0&&(r.w>0||!(ex.inc>0))))return toast(ex.inc>0?'Enter weight and reps':'Enter reps');
-  if(r.test&&r.r!=1)return toast('A 1RM test must be a single (1 rep).');
-  const rec={exId:ex.id,sess:W.sess,wn:W.name,pd:W.pd,t:Date.now(),w:+r.w||0,r:r.r,rir:hasR(r)?r.rir:null,test:!!r.test};
+  const test=isTest(r);
+  const rec={exId:ex.id,sess:W.sess,wn:W.name,pd:W.pd,t:Date.now(),w:+r.w||0,r:r.r,rir:hasR(r)?r.rir:null,test};
   r.id=await put('sets',rec);r.done=true;saveW();startRest();
   const x=info(r,ex),pr=S.pr[ex.id];
-  if(r.test){if(confirm(`Save ${fmt(r.w)} as new PR for ${ex.name}?`+(pr?`\nCurrent: ${fmt(pr.w)} (tested ${age(pr.t)})`:''))){
-    await put('pr_history',{exId:ex.id,w:r.w,t:rec.t,setId:r.id});await load()}}
-  else if(x.w)toast(`${x.s}. This e1RM is over 3% above your PR. Consider testing a new max.`);
+  if(test){const pb=ex.pb||0,beat=r.w>pb;if(beat)await put('exercises',{...ex,pb:r.w});
+   if(confirm(`Save ${fmt(r.w)} as your current 1RM for ${ex.name}?`+(pr?`\nCurrent 1RM: ${fmt(pr.w)} (tested ${age(pr.t)})`:'')+(beat?'\nNew lifetime PB!':'')))
+    await put('pr_history',{exId:ex.id,w:r.w,t:rec.t,setId:r.id});
+   await load()}
+  else if(x.w)toast(`${x.s}. This e1RM is over 3% above your 1RM. Consider testing a new max.`);
   render()},
  undo:async s=>{const r=W.items[s.dataset.i].rows[s.dataset.j];if(r.id)await del('sets',r.id);r.done=false;delete r.id;saveW();render()},
  exNew:()=>{E={name:'',mode:'rir',inc:2,lo:8,hi:12,rir:2};S.prl=[];S.hist=[];S.view={t:'exd'};render()},
  exOpen:async(s,d)=>{E=structuredClone(EX(+d.i));S.view={t:'exd'};await loadEx(E.id)},
  exSave:async()=>{if(!E.name.trim())return toast('Name required');E.inc=+E.inc||0;if(E.inc<0)return toast('Increment can\'t be negative');
   if(E.mode=='rir'){E.lo||=8;E.hi||=Math.max(E.lo,12);E.rir??=2;if(E.hi<E.lo)return toast('Reps max must be at least reps min')}
-  await put('exercises',E);await load();back()},
+  const cur=+E.cur||0;delete E.cur;
+  if(E.pb===''||E.pb==null||!(+E.pb>0))delete E.pb;else E.pb=+E.pb;
+  if(cur>0&&!(E.pb>=cur))E.pb=cur;   // PB can't be below your current 1RM
+  const id=await put('exercises',E);
+  if(cur>0&&cur!==S.pr[id]?.w)await put('pr_history',{exId:id,w:cur,t:Date.now()});
+  await load();back()},
  exDel:async()=>{if(!confirm('Delete exercise with its PRs and set history?'))return;
   for(const s of await all('sets','ex',E.id))await del('sets',s.id);
   for(const p of await all('pr_history','ex',E.id))await del('pr_history',p.id);
   await del('exercises',E.id);await load();back()},
  prAdd:async()=>{const w=+$('#prw').value,d=$('#prd').value;if(!(w>0))return toast('Enter the tested weight');
-  await put('pr_history',{exId:E.id,w,t:new Date(d+'T12:00').getTime()});await loadEx(E.id)},
- prDel:async(s,d)=>{await del('pr_history',+d.i);await loadEx(E.id)},
+  await put('pr_history',{exId:E.id,w,t:new Date(d+'T12:00').getTime()});
+  const ex=EX(E.id);if(ex&&w>(ex.pb||0))await put('exercises',{...ex,pb:w});
+  await loadEx(E.id);E.pb=EX(E.id)?.pb;E.cur=S.pr[E.id]?.w??'';render()},
+ prDel:async(s,d)=>{await del('pr_history',+d.i);await loadEx(E.id);E.cur=S.pr[E.id]?.w??'';render()},
  calnav:(s,d)=>{let m=CAL.m+ +d.d,y=CAL.y;if(m<0){m=11;y--}else if(m>11){m=0;y++}CAL.m=m;CAL.y=y;CAL.sel=null;render()},
  caltoday:()=>{const n=new Date();CAL.y=n.getFullYear();CAL.m=n.getMonth();CAL.sel=null;render()},
  calday:(s,d)=>{CAL.sel=CAL.sel==d.k?null:d.k;render()},
@@ -374,7 +389,7 @@ function clean(d){
   arr=(o,n,max=2e5)=>{if(!Array.isArray(o[n])||o[n].length>max)throw new Error('bad '+n);return o[n]};
  return{t:opt(d.t)??Date.now(),
   exercises:arr(d,'exercises').map(e=>{if(!['rir','pct'].includes(e.mode))throw new Error('bad mode');
-   return{id:num(e.id,'id'),name:str(e.name,'name'),mode:e.mode,inc:num(e.inc,'inc'),lo:opt(e.lo),hi:opt(e.hi),rir:opt(e.rir)}}),
+   return{id:num(e.id,'id'),name:str(e.name,'name'),mode:e.mode,inc:num(e.inc,'inc'),lo:opt(e.lo),hi:opt(e.hi),rir:opt(e.rir),pb:opt(e.pb)}}),
   templates:arr(d,'templates').map(t=>({id:num(t.id,'id'),name:str(t.name,'name'),weeks:opt(t.weeks),active:t.active===true,runStart:opt(t.runStart),days:arr(Array.isArray(t.days)?t:{days:[{name:'Day 1',items:t.items}]},'days',14).map(y=>({name:str(y.name,'name'),items:arr(y,'items',200).map(i=>({exId:num(i.exId,'exId'),n:opt(i.n),lo:opt(i.lo),hi:opt(i.hi),rir:opt(i.rir),text:typeof i.text=='string'?i.text.slice(0,2000):''}))}))})),
   pr_history:arr(d,'pr_history').map(p=>({id:num(p.id,'id'),exId:num(p.exId,'exId'),w:num(p.w,'w'),t:num(p.t,'t'),setId:opt(p.setId)})),
   sets:arr(d,'sets').map(s=>({id:num(s.id,'id'),exId:num(s.exId,'exId'),sess:num(s.sess,'sess'),t:num(s.t,'t'),w:num(s.w,'w'),r:num(s.r,'r'),rir:s.rir==null?null:num(s.rir,'rir'),test:s.test===true,wn:typeof s.wn=='string'?s.wn.slice(0,100):undefined,pd:typeof s.pd=='string'&&/^\d+:\d+$/.test(s.pd)?s.pd:undefined}))}}
