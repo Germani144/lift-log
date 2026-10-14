@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-uTfZgKlnPSOy4DJzTsZGF+xAZdjVnHgvXShMzRdkkjk='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3/z4rOQCGT2kPMVblMVc4fNKAbCIU2Nmd651Pv97l44='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <link rel="manifest" href="manifest.webmanifest">
@@ -205,7 +205,7 @@ function rTrain(){
  return`<button class=b data-a=toLanding>‹ Back</button><div class=hd><h2>${esc(W.name)}</h2><button class="b p" data-a=finish>Finish</button></div>`+W.items.map(card).join('')+
  (S.ex.length?`<button class="b p" style="width:100%;margin-top:12px" data-a=pickAdd>+ Add exercise</button>`:'<p class=m>Create exercises first.</p>')+restBar()}
 
-function rEx(){return`<h2>Exercises</h2>`+S.ex.map(e=>{const p=S.pr[e.id];
+function rEx(){return`<h2>Exercises</h2>`+(!S.ex.length&&!S.sets.length&&!ghCfg()?`<div class=card><b>No data here</b><div class=m>If you had a backup, restore it first: enter your token in Automatic backup below and tap Turn on. Don't add anything before restoring.</div></div>`:'')+S.ex.map(e=>{const p=S.pr[e.id];
  return`<button class="b big" data-a=exOpen data-i=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · ${e.inc>0?'increment '+e.inc:'bodyweight'}${p?` · 1RM ${fmt(p.w)} (${age(p.t)})`:''}${e.pb?` · PB ${fmt(e.pb)}`:''}</small></button>`}).join('')+`<button class="b p" data-a=exNew>New exercise</button>
  ${ghCard()}
  <div class=card><b>Manual backup</b><div class=m>${lastBackup()?'Last backup '+age(lastBackup()):'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
@@ -298,6 +298,7 @@ app.addEventListener('input',e=>{const t=e.target,s=t.closest('.set');
   r[f]=f=='test'?t.checked:t.value===''?'':+t.value;saveW();updInfo(s)}
  else if(t.dataset.b&&E)setPath(E,t.dataset.b,t.dataset.n!=null?(t.value===''?'':+t.value):t.value)});
 app.addEventListener('change',e=>{if(e.target.id=='imp')importData(e.target.files[0]);else if(e.target.dataset.dpw!=null)resizeDays(+e.target.value);else if(e.target.dataset.rr!=null)render()});
+app.addEventListener('submit',e=>{if(e.target.id=='ghf'){e.preventDefault();A.ghSave()}});
 app.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b&&!b.disabled)A[b.dataset.a]?.(b.closest('.set'),b.dataset)});
 
 async function loadEx(id){S.prl=(await all('pr_history','ex',id)).sort((a,b)=>b.t-a.t);
@@ -443,10 +444,11 @@ async function ghPull(g){const r=await fetch(ghUrl(g),{headers:ghH(g,'applicatio
 async function autoBackup(){const g=ghCfg();if(!g||!navigator.onLine||(!S.ex.length&&!S.sets.length))return;
  try{await ghPush(g)}catch(e){ls('gherr','Last automatic backup failed: '+e.message)}
  if(S.tab=='ex'&&!S.view)render()}
+const DEFREPO='Germani144/lift-log-data';
 function ghCard(){const g=ghCfg(),lb=lastBackup(),er=lg('gherr');
  return`<div class=card><b>Automatic backup (GitHub)</b>`+(g?
  `<div class=m>On → ${esc(g.repo)}. Saves a few seconds after each change${lb?'. Last backup '+age(lb):''}.</div>${er?`<div class=wr>${esc(er)}</div>`:''}<div class=row><button class=b data-a=ghNow>Back up now</button><button class=b data-a=ghRestore>Restore</button><button class=b data-a=ghOff>Turn off</button></div>`
- :`<div class=m>Use a <b>private</b> repo just for backups and a fine-grained token limited to that repo with Contents: read and write. Don't use your Pages repo.</div><label>Repo<input id=ghr placeholder="your-name/lift-log-data" autocapitalize=off></label><label>Token<input id=ght type=password autocomplete=off></label><button class="b p" data-a=ghSave>Turn on</button>`)+`</div>`}
+ :`<div class=m>Use a <b>private</b> repo just for backups and a fine-grained token limited to that repo with Contents: read and write. Don't use your Pages repo.</div><form id=ghf><input name=username autocomplete=username value="${esc(DEFREPO)}" hidden><label>Repo<input id=ghr value="${esc(DEFREPO)}" autocapitalize=off></label><label>Token<input id=ght name=password type=password autocomplete=current-password></label><button class="b p" type=submit>Turn on</button></form>`)+`</div>`}
 Object.assign(A,{
  ghSave:async()=>{const repo=$('#ghr').value.trim(),token=$('#ght').value.trim();
   if(!/^[\w.-]+\/[\w.-]+$/.test(repo)||!token)return toast('Enter the repo as owner/name and a token');
