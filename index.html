@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DehXWHKAhqpuwaSqlVAD0DoNc3zRRGRev6j+9FqARXo='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-o8vD89N7JliGOv3c39ITY19skjba0HnR/j47Y36Q5rk='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <link rel="manifest" href="manifest.webmanifest">
@@ -70,7 +70,7 @@ let tt;const toast=m=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearT
 /* ---------- math ---------- */
 const pct=(r,rir)=>1/(1+(r+rir)/30);  // %1RM from reps + RIR
 const e1=(w,r,rir)=>w/pct(r,rir);
-const hasR=r=>r.rir!==''&&r.rir!=null;
+const hasR=r=>r.rir!==''&&r.rir!=null&&+r.rir>=0&&+r.rir<=10;
 const isTest=r=>+r.r===1&&hasR(r)&&+r.rir===0;   // 1 rep at 0 RIR counts as a 1RM
 const rnd=(x,i)=>i>0?+(Math.round(x/i)*i).toFixed(3):+(+x).toFixed(2);  // increment 0 = no rounding (bodyweight)
 const wt=w=>w>0?fmt(w):'BW';
@@ -85,7 +85,7 @@ const open=()=>new Promise((res,rej)=>{const r=indexedDB.open('liftlog',1);
  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
 const rq=r=>new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
 const st=(n,m='readonly')=>db.transaction(n,m).objectStore(n);
-const all=(n,ix,k)=>rq(ix?st(n).index(ix).getAll(k):st(n).getAll());
+const all=(n,ix,k)=>rq(ix?st(n).index(ix).getAll(k):st(n).getAll()).then(a=>n=='sets'?a.map(s=>s.rir>10?{...s,rir:null}:s):a);  // RIR above 10 is treated as 'not tracked'
 const put=(n,o)=>(touch(),rq(st(n,'readwrite').put(o)));
 const del=(n,id)=>(touch(),rq(st(n,'readwrite').delete(id)));
 
@@ -203,7 +203,7 @@ function rEx(){return`<h2>Exercises</h2>`+S.ex.map(e=>{const p=S.pr[e.id];
 
 function sessions(sets){const g={};sets.forEach(s=>(g[s.sess]??=[]).push(s));
  return Object.keys(g).map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),es=ss.filter(s=>s.rir!=null&&!s.test).map(s=>e1(s.w,s.r,s.rir));
-  return{k:+k,t:ss[0].t,ss,vol:ss.reduce((a,s)=>a+s.w*s.r,0),top:ss.reduce((a,b)=>b.w>a.w?b:a),e:es.length?Math.max(...es):null}}).sort((a,b)=>b.k-a.k)}
+  return{k:+k,t:ss[0].t,ss,vol:ss.reduce((a,s)=>a+s.r,0),top:ss.reduce((a,b)=>b.w>a.w?b:a),e:es.length?Math.max(...es):null}}).sort((a,b)=>b.k-a.k)}
 function spark(l,v){if(v.length<2)return'';const mx=Math.max(...v),mn=Math.min(...v),R=mx-mn||1;
  const pts=v.map((y,i)=>`${(i/(v.length-1)*280+10).toFixed(1)},${(46-(y-mn)/R*40).toFixed(1)}`).join(' ');
  return`<div class=m style="margin-top:8px">${l}: ${fmt(v[0])} → ${fmt(v[v.length-1])}</div><svg viewBox="0 0 300 52" width="100%" height="52"><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="2"/></svg>`}
@@ -224,14 +224,14 @@ function rExd(){const e=E;if(e.cur===undefined)e.cur=e.id?S.pr[e.id]?.w??'':'';c
  const ses=sessions(S.hist);
  h+=`<div class=card><b>History</b>`+(ses.length?
   `<div class=m>${ses.length} sessions · best e1RM ${fmt(Math.max(0,...ses.map(x=>x.e||0)))||'–'} · heaviest ${fmt(Math.max(...ses.map(x=>x.top.w)))}</div>`+
-  spark('Top-set weight',ses.map(x=>x.top.w).reverse())+spark('Volume per session',ses.map(x=>x.vol).reverse())+
-  ses.map(x=>`<div class=card style="margin:8px 0"><div class=hd><b>${dstr(x.t)}</b><span class=m>volume ${fmt(x.vol)}</span></div><div class=m>Top set ${wt(x.top.w)}×${x.top.r}${x.e?` · best e1RM ${fmt(x.e)}`:''}</div>`+
+  spark('Top-set weight',ses.map(x=>x.top.w).reverse())+spark('Volume per session (reps)',ses.map(x=>x.vol).reverse())+
+  ses.map(x=>`<div class=card style="margin:8px 0"><div class=hd><b>${dstr(x.t)}</b><span class=m>volume ${x.vol} reps</span></div><div class=m>Top set ${wt(x.top.w)}×${x.top.r}${x.e?` · best e1RM ${fmt(x.e)}`:''}</div>`+
    x.ss.map(s=>`<div class=hl><span>${wt(s.w)} × ${s.r}${s.rir!=null?` @ ${fmt(s.rir)} RIR`:''}${s.test?' ★test':''}</span><button data-a=sdel data-i=${s.id}>×</button></div>`).join('')+`</div>`).join('')
   :'<p class=m>No sets logged.</p>')+`</div>`;
  return h}
 
 const dk=t=>{const d=new Date(t);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
-const vol=a=>a.reduce((t,x)=>t+x.w*x.r,0);
+const vol=a=>a.reduce((t,x)=>t+x.r,0);   // volume = total reps performed
 let CAL=null;
 function rCal(g){const now=new Date();CAL??={y:now.getFullYear(),m:now.getMonth(),sel:null};
  const by={};Object.keys(g).forEach(k=>(by[dk(+k)]??=[]).push(k));
@@ -247,15 +247,15 @@ function rDay(g){if(!CAL.sel)return'<p class=m>Tap a highlighted day to see its 
   ks=Object.keys(g).filter(k=>dk(+k)==CAL.sel).sort((a,b)=>a-b);
  if(!ks.length)return`<div class=card><b>${label}</b><p class=m>No workout logged.</p></div>`;
  return ks.map(k=>{const ss=g[k].slice().sort((a,b)=>a.t-b.t),ids=[...new Set(ss.map(s=>s.exId))];
-  return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${label}</span></div><div class=m>${ids.length} exercise${ids.length==1?'':'s'} · ${ss.length} sets · volume ${fmt(vol(ss))}</div>`+
-  ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div style="margin-top:12px"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>vol ${fmt(vol(xs))}</span></div>`+
+  return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${label}</span></div><div class=m>${ids.length} exercise${ids.length==1?'':'s'} · ${ss.length} sets · volume ${vol(ss)} reps</div>`+
+  ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div style="margin-top:12px"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>${vol(xs)} reps</span></div>`+
    xs.map((s,j)=>`<div class=hl><span class=m>Set ${j+1}</span><span>${wt(s.w)}${s.w>0?' kg':''} × ${s.r}${s.rir!=null?` · RIR ${fmt(s.rir)}`:''}${s.test?' ★':''}</span></div>`).join('')+`</div>`}).join('')+`</div>`}).join('')}
 
 function rHist(){const g={};S.sets.forEach(s=>(g[s.sess]??=[]).push(s));
  const ks=Object.keys(g).sort((a,b)=>b-a);
  return`<h2>History</h2>`+rCal(g)+`<h2 style="margin-top:22px">All workouts</h2>`+(ks.map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),ids=[...new Set(ss.map(s=>s.exId))];
-  return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${dstr(+k)} · vol ${fmt(vol(ss))}</span></div>`+
-  ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div class=hl style="display:block"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>vol ${fmt(vol(xs))}</span></div><div class=m>${xs.map(s=>`${wt(s.w)}×${s.r}${s.rir!=null?' @'+fmt(s.rir):''}${s.test?' ★':''}`).join(' · ')}</div></div>`}).join('')+
+  return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${dstr(+k)} · ${vol(ss)} reps</span></div>`+
+  ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div class=hl style="display:block"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>${vol(xs)} reps</span></div><div class=m>${xs.map(s=>`${wt(s.w)}×${s.r}${s.rir!=null?' @'+fmt(s.rir):''}${s.test?' ★':''}`).join(' · ')}</div></div>`}).join('')+
   `<button class=b data-a=wdel data-i=${k}>Delete workout</button></div>`}).join('')||'<p class=m>No workouts logged yet. Sets appear here as soon as you tap ○.</p>')}
 
 function rTpl(){return`<h2>Plans</h2>`+S.tpl.map(t=>`<button class="b big" data-a=tplEdit data-i=${t.id}>${esc(t.name)}<small>${t.days.length} day${t.days.length>1?'s':''}/week · ${t.weeks} weeks${t.active?' · active':''} · ${t.days.map(d=>esc(d.name)).join(', ')}</small></button>`).join('')+`<button class="b p" data-a=tplNew>New weekly plan</button>`}
@@ -327,6 +327,7 @@ const A={
   r.w=Math.max(0,rnd((+r.w||0)+ +d.d*(EX(it.exId).inc||2),.001));$('[data-f=w]',s).value=fmt(r.w);saveW();updInfo(s)},
  log:async s=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j],ex=EX(it.exId);
   if(!(r.r>0&&(r.w>0||!(ex.inc>0))))return toast(ex.inc>0?'Enter weight and reps':'Enter reps');
+  if(r.rir!==''&&r.rir!=null&&!(+r.rir>=0&&+r.rir<=10))return toast('RIR must be between 0 and 10. Leave it blank if you don\'t track it.');
   const test=isTest(r);
   const rec={exId:ex.id,sess:W.sess,wn:W.name,pd:W.pd,t:Date.now(),w:+r.w||0,r:r.r,rir:hasR(r)?r.rir:null,test};
   r.id=await put('sets',rec);r.done=true;saveW();startRest();
