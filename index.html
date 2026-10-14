@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Sn9CzskN3aTciTHegQFD79pXjJcnna57UEN80jC0RqM='; style-src 'unsafe-inline'; img-src data:; manifest-src blob:; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-vabsKZeqQnDXM/+wRPPlpH7VZkekbuV5Nha+8t7Zhsc='; style-src 'unsafe-inline'; img-src data:; manifest-src blob:; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <title>Lift Log</title>
@@ -60,7 +60,8 @@ let tt;const toast=m=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearT
 const pct=(r,rir)=>1/(1+(r+rir)/30);  // %1RM from reps + RIR
 const e1=(w,r,rir)=>w/pct(r,rir);
 const hasR=r=>r.rir!==''&&r.rir!=null;
-const rnd=(x,i)=>+(Math.round(x/i)*i).toFixed(3);
+const rnd=(x,i)=>i>0?+(Math.round(x/i)*i).toFixed(3):+(+x).toFixed(2);  // increment 0 = no rounding (bodyweight)
+const wt=w=>w>0?fmt(w):'BW';
 
 /* ---------- IndexedDB ---------- */
 let db;
@@ -102,10 +103,11 @@ async function suggest(ex,n){
  const last=ss.filter(s=>s.sess==ss[ss.length-1].sess);
  for(let j=0;j<n;j++){const b=last[Math.min(j,last.length-1)];
   const next=Math.round(b.r+b.rir-ex.rir)+1;let w=b.w,r=next;
-  if(next>ex.hi||next<ex.lo){r=ex.lo;w=rnd(b.w/pct(b.r,b.rir)*pct(ex.lo,ex.rir),ex.inc);
+  if(!(ex.inc>0))r=Math.max(ex.lo,next);
+  else if(next>ex.hi||next<ex.lo){r=ex.lo;w=rnd(b.w/pct(b.r,b.rir)*pct(ex.lo,ex.rir),ex.inc);
    if(next>ex.hi&&w<=b.w)w=rnd(b.w+ex.inc,ex.inc)}
   rows.push({w:rnd(w,ex.inc),r,rir:ex.rir})}
- return{rows,hint:`Last: ${last.map(s=>`${fmt(s.w)}×${s.r} @${fmt(s.rir)}`).join(', ')} · ${ex.lo}–${ex.hi} reps @ ${ex.rir} RIR`}}
+ return{rows,hint:`Last: ${last.map(s=>`${wt(s.w)}×${s.r} @${fmt(s.rir)}`).join(', ')} · ${ex.lo}–${ex.hi} reps @ ${ex.rir} RIR`}}
 
 async function addItem(it){const ex=EX(it.exId);if(!ex)return;
  let rows=[],hint='';const pr=S.pr[ex.id],pk=(a,b)=>a===''||a==null?b:a;
@@ -181,7 +183,7 @@ function rTrain(){
  (S.ex.length?`<div class=row><select id=sx>${opts()}</select><button class=b data-a=addx>Add exercise</button></div>`:'<p class=m>Create exercises first.</p>')+restBar()}
 
 function rEx(){return`<h2>Exercises</h2>`+S.ex.map(e=>{const p=S.pr[e.id];
- return`<button class="b big" data-a=exOpen data-i=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · increment ${e.inc}${p?` · PR ${fmt(p.w)} (${age(p.t)})`:''}</small></button>`}).join('')+`<button class="b p" data-a=exNew>New exercise</button>
+ return`<button class="b big" data-a=exOpen data-i=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · ${e.inc>0?'increment '+e.inc:'bodyweight'}${p?` · PR ${fmt(p.w)} (${age(p.t)})`:''}</small></button>`}).join('')+`<button class="b p" data-a=exNew>New exercise</button>
  ${ghCard()}
  <div class=card><b>Manual backup</b><div class=m>${lastBackup()?'Last backup '+age(lastBackup()):'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
  <div class=row><button class=b data-a=backup>Export</button><button class=b data-a=restore>Import</button></div><input type=file id=imp accept=".json,application/json" hidden></div>`}
@@ -197,7 +199,7 @@ function rExd(){const e=E,n=k=>`type=number step=any data-n data-b=${k} value="$
  let h=`<button class=b data-a=back>‹ Back</button><div class=card>
  <label>Name<input data-b=name value="${esc(e.name)}"></label>
  <label>Tracking<select data-b=mode data-rr><option value=rir ${e.mode=='rir'?'selected':''}>RIR + weight + reps (auto-suggest)</option><option value=pct ${e.mode=='pct'?'selected':''}>% of tested 1RM × reps</option></select></label>
- <label>Weight increment<input ${n('inc')}></label>`+
+ <label>Weight increment (0 = bodyweight)<input ${n('inc')}></label>`+
  (e.mode=='rir'?`<div class=row><label>Reps min<input ${n('lo')}></label><label>Reps max<input ${n('hi')}></label><label>Target RIR<input ${n('rir')}></label></div>`:'')+
  `<div class=row><button class="b p" data-a=exSave>Save</button>${e.id?'<button class=b data-a=exDel>Delete</button>':''}</div></div>`;
  if(!e.id)return h;
@@ -208,8 +210,8 @@ function rExd(){const e=E,n=k=>`type=number step=any data-n data-b=${k} value="$
  h+=`<div class=card><b>History</b>`+(ses.length?
   `<div class=m>${ses.length} sessions · best e1RM ${fmt(Math.max(0,...ses.map(x=>x.e||0)))||'–'} · heaviest ${fmt(Math.max(...ses.map(x=>x.top.w)))}</div>`+
   spark('Top-set weight',ses.map(x=>x.top.w).reverse())+spark('Volume per session',ses.map(x=>x.vol).reverse())+
-  ses.map(x=>`<div class=card style="margin:8px 0"><div class=hd><b>${dstr(x.t)}</b><span class=m>volume ${fmt(x.vol)}</span></div><div class=m>Top set ${fmt(x.top.w)}×${x.top.r}${x.e?` · best e1RM ${fmt(x.e)}`:''}</div>`+
-   x.ss.map(s=>`<div class=hl><span>${fmt(s.w)} × ${s.r}${s.rir!=null?` @ ${fmt(s.rir)} RIR`:''}${s.test?' ★test':''}</span><button data-a=sdel data-i=${s.id}>×</button></div>`).join('')+`</div>`).join('')
+  ses.map(x=>`<div class=card style="margin:8px 0"><div class=hd><b>${dstr(x.t)}</b><span class=m>volume ${fmt(x.vol)}</span></div><div class=m>Top set ${wt(x.top.w)}×${x.top.r}${x.e?` · best e1RM ${fmt(x.e)}`:''}</div>`+
+   x.ss.map(s=>`<div class=hl><span>${wt(s.w)} × ${s.r}${s.rir!=null?` @ ${fmt(s.rir)} RIR`:''}${s.test?' ★test':''}</span><button data-a=sdel data-i=${s.id}>×</button></div>`).join('')+`</div>`).join('')
   :'<p class=m>No sets logged.</p>')+`</div>`;
  return h}
 
@@ -217,7 +219,7 @@ function rHist(){const g={};S.sets.forEach(s=>(g[s.sess]??=[]).push(s));
  const ks=Object.keys(g).sort((a,b)=>b-a),V=a=>a.reduce((t,x)=>t+x.w*x.r,0);
  return`<h2>History</h2><p class=m>Sets read weight × reps @ RIR. Volume = weight × reps.</p>`+(ks.map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),ids=[...new Set(ss.map(s=>s.exId))];
   return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${dstr(+k)} · vol ${fmt(V(ss))}</span></div>`+
-  ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div class=hl style="display:block"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>vol ${fmt(V(xs))}</span></div><div class=m>${xs.map(s=>`${fmt(s.w)}×${s.r}${s.rir!=null?' @'+fmt(s.rir):''}${s.test?' ★':''}`).join(' · ')}</div></div>`}).join('')+
+  ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div class=hl style="display:block"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>vol ${fmt(V(xs))}</span></div><div class=m>${xs.map(s=>`${wt(s.w)}×${s.r}${s.rir!=null?' @'+fmt(s.rir):''}${s.test?' ★':''}`).join(' · ')}</div></div>`}).join('')+
   `<button class=b data-a=wdel data-i=${k}>Delete workout</button></div>`}).join('')||'<p class=m>No workouts logged yet. Sets appear here as soon as you tap ○.</p>')}
 
 function rTpl(){return`<h2>Plans</h2>`+S.tpl.map(t=>`<button class="b big" data-a=tplEdit data-i=${t.id}>${esc(t.name)}<small>${t.days.length} day${t.days.length>1?'s':''}/week · ${t.weeks} weeks${t.active?' · active':''} · ${t.days.map(d=>esc(d.name)).join(', ')}</small></button>`).join('')+`<button class="b p" data-a=tplNew>New weekly plan</button>`}
@@ -286,11 +288,11 @@ const A={
   W.items.splice(+d.i,1);saveW();render()},
  addset:(s,d)=>{const rows=W.items[d.i].rows,l=rows[rows.length-1]||{};rows.push({w:l.w??'',r:l.r??'',p:l.p??''});saveW();render()},
  step:(s,d)=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j];
-  r.w=Math.max(0,rnd((+r.w||0)+ +d.d*EX(it.exId).inc,.001));$('[data-f=w]',s).value=fmt(r.w);saveW();updInfo(s)},
+  r.w=Math.max(0,rnd((+r.w||0)+ +d.d*(EX(it.exId).inc||2.5),.001));$('[data-f=w]',s).value=fmt(r.w);saveW();updInfo(s)},
  log:async s=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j],ex=EX(it.exId);
-  if(!(r.w>0&&r.r>0))return toast('Enter weight and reps');
+  if(!(r.r>0&&(r.w>0||!(ex.inc>0))))return toast(ex.inc>0?'Enter weight and reps':'Enter reps');
   if(r.test&&r.r!=1)return toast('A 1RM test must be a single (1 rep).');
-  const rec={exId:ex.id,sess:W.sess,wn:W.name,pd:W.pd,t:Date.now(),w:r.w,r:r.r,rir:hasR(r)?r.rir:null,test:!!r.test};
+  const rec={exId:ex.id,sess:W.sess,wn:W.name,pd:W.pd,t:Date.now(),w:+r.w||0,r:r.r,rir:hasR(r)?r.rir:null,test:!!r.test};
   r.id=await put('sets',rec);r.done=true;saveW();startRest();
   const x=info(r,ex),pr=S.pr[ex.id];
   if(r.test){if(confirm(`Save ${fmt(r.w)} as new PR for ${ex.name}?`+(pr?`\nCurrent: ${fmt(pr.w)} (tested ${age(pr.t)})`:''))){
@@ -300,7 +302,7 @@ const A={
  undo:async s=>{const r=W.items[s.dataset.i].rows[s.dataset.j];if(r.id)await del('sets',r.id);r.done=false;delete r.id;saveW();render()},
  exNew:()=>{E={name:'',mode:'rir',inc:2.5,lo:8,hi:12,rir:2};S.prl=[];S.hist=[];S.view={t:'exd'};render()},
  exOpen:async(s,d)=>{E=structuredClone(EX(+d.i));S.view={t:'exd'};await loadEx(E.id)},
- exSave:async()=>{if(!E.name.trim())return toast('Name required');if(!(E.inc>0))return toast('Increment must be above 0');
+ exSave:async()=>{if(!E.name.trim())return toast('Name required');E.inc=+E.inc||0;if(E.inc<0)return toast('Increment can\'t be negative');
   if(E.mode=='rir'){E.lo||=8;E.hi||=Math.max(E.lo,12);E.rir??=2;if(E.hi<E.lo)return toast('Reps max must be at least reps min')}
   await put('exercises',E);await load();back()},
  exDel:async()=>{if(!confirm('Delete exercise with its PRs and set history?'))return;
