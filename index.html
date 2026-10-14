@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-o8vD89N7JliGOv3c39ITY19skjba0HnR/j47Y36Q5rk='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0IYlbXY/NAZo6O865Ni7Uons9wbjoGNOnxw8N6yJAiI='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <link rel="manifest" href="manifest.webmanifest">
@@ -129,7 +129,7 @@ async function addItem(it){const ex=EX(it.exId);if(!ex)return;
  if(!rows.length)rows.push({w:'',r:'',rir:''});
  W.items.push({exId:ex.id,rows,hint})}
 
-async function start(tid,day=0){const t=tid?S.tpl.find(x=>x.id==tid):null,dy=t&&t.days[day];
+async function start(tid,day=0){PICK=null;const t=tid?S.tpl.find(x=>x.id==tid):null,dy=t&&t.days[day];
  W={sess:Date.now(),name:dy?`${t.name} · ${dy.name}`:'Quick workout',pd:dy?`${t.id}:${day}`:undefined,rest:+lg('rest')||120,restEnd:0,items:[]};
  if(dy)for(const it of dy.items)await addItem(it);
  saveW();render()}
@@ -156,7 +156,7 @@ function card(it,i){const ex=EX(it.exId);if(!ex)return'';const pr=S.pr[ex.id];
   <input data-f=r inputmode=numeric placeholder=reps aria-label=Reps value="${fmt(r.r)}" ${d}><input data-f=rir inputmode=decimal placeholder=RIR aria-label="Reps in reserve" value="${fmt(r.rir)}" ${d}>
   <button class="ck ${r.done?'on':''}" data-a=${r.done?'undo':'log'}>${r.done?'✓':'○'}</button>
   <div class=inf><span class="${x.w?'wr':''}">${x.s}</span><button class=lk data-a=rms>Remove set</button></div></div>`}).join('');
- return h+`<button class=b data-a=addset data-i=${i}>+ Set</button></div>`}
+ return h+`<div class=row><button class=b data-a=addset data-i=${i}>+ Set</button><button class=b data-a=repl data-i=${i}>⇄ Replace</button></div></div>`}
 
 function lastBackup(){try{return +localStorage.getItem('lb')||0}catch{return 0}}
 function nag(){const lb=lastBackup();
@@ -188,12 +188,20 @@ function tickRest(){if(!W)return;
  const b=$('#rt');if(b){b.textContent=restText();b.className=restCls()}}
 setInterval(tickRest,250);
 
+let PICK=null,PQ='';   // exercise picker state: {t:'add'|'rep', i, y}
+const sortedEx=()=>S.ex.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+function pickList(){const q=PQ.trim().toLowerCase(),skip=PICK.t=='rep'?W.items[PICK.i]?.exId:null,
+ l=sortedEx().filter(e=>e.id!=skip&&e.name.toLowerCase().includes(q));
+ return l.map(e=>`<button class="b big" data-a=pickGo data-x=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':`RIR · ${e.lo}–${e.hi} reps`}</small></button>`).join('')||'<p class=m>No exercise matches.</p>'}
+function rPick(){const old=PICK.t=='rep'?EX(W.items[PICK.i]?.exId):null;
+ return`<div class=hd><h2>${PICK.t=='rep'?'Replace '+esc(old?.name||'exercise'):'Add exercise'}</h2><button class=b data-a=pickCancel>Cancel</button></div><input id=pq placeholder="Search exercises" value="${esc(PQ)}" autocomplete=off><div id=plist style="margin-top:8px">${pickList()}</div>`}
 function rTrain(){
  if(!W){const ps=[...S.tpl.filter(t=>t.active),...S.tpl.filter(t=>!t.active)];
   return`<h2>Train</h2>`+nag()+(ps.map(rPlan).join('')||'<p class=m>No plans yet. Build one in Plans, or start a quick workout.</p>')+`<button class=b data-a=start>Quick workout</button>`}
  if(!W.rest)W.rest=+lg('rest')||120;
+ if(PICK)return rPick();
  return`<div class=hd><h2>${esc(W.name)}</h2><button class="b p" data-a=finish>Finish</button></div>`+W.items.map(card).join('')+
- (S.ex.length?`<div class=row><select id=sx>${opts()}</select><button class=b data-a=addx>Add exercise</button></div>`:'<p class=m>Create exercises first.</p>')+restBar()}
+ (S.ex.length?`<button class="b p" style="width:100%;margin-top:12px" data-a=pickAdd>+ Add exercise</button>`:'<p class=m>Create exercises first.</p>')+restBar()}
 
 function rEx(){return`<h2>Exercises</h2>`+S.ex.map(e=>{const p=S.pr[e.id];
  return`<button class="b big" data-a=exOpen data-i=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · ${e.inc>0?'increment '+e.inc:'bodyweight'}${p?` · 1RM ${fmt(p.w)} (${age(p.t)})`:''}${e.pb?` · PB ${fmt(e.pb)}`:''}</small></button>`}).join('')+`<button class="b p" data-a=exNew>New exercise</button>
@@ -283,6 +291,7 @@ function render(){
 /* ---------- events ---------- */
 const setPath=(o,p,v)=>{const k=p.split('.'),l=k.pop();k.forEach(x=>o=o[x]);o[l]=v};
 app.addEventListener('input',e=>{const t=e.target,s=t.closest('.set');
+ if(t.id=='pq'){PQ=t.value;$('#plist').innerHTML=pickList();return}
  if(s&&t.dataset.f){const r=W.items[s.dataset.i].rows[s.dataset.j],f=t.dataset.f;
   r[f]=f=='test'?t.checked:t.value===''?'':+t.value;saveW();updInfo(s)}
  else if(t.dataset.b&&E)setPath(E,t.dataset.b,t.dataset.n!=null?(t.value===''?'':+t.value):t.value)});
@@ -296,11 +305,20 @@ const back=()=>{S.view=null;E=null;render()};
 const A={
  backup:()=>exportData(),
  restore:()=>$('#imp').click(),
- tab:async(s,d)=>{S.tab=d.i;S.view=null;E=null;await load();render()},
+ tab:async(s,d)=>{PICK=null;S.tab=d.i;S.view=null;E=null;await load();render()},
  back,
  start:(s,d)=>start(+d.i||null,+d.d||0),
  finish:async()=>{if(confirm('Finish workout?')){W=null;saveW();await load();render()}},
- addx:async()=>{await addItem({exId:+$('#sx').value,n:3});saveW();render()},
+ pickAdd:()=>{PICK={t:'add',y:scrollY};PQ='';render();scrollTo(0,0)},
+ repl:(s,d)=>{PICK={t:'rep',i:+d.i,y:scrollY};PQ='';render();scrollTo(0,0)},
+ pickCancel:()=>{const y=PICK.y;PICK=null;render();scrollTo(0,y)},
+ pickGo:async(s,d)=>{const exId=+d.x,P=PICK;
+  if(P.t=='add'){await addItem({exId,n:3});PICK=null;saveW();render();scrollTo(0,document.body.scrollHeight);return}
+  const it=W.items[P.i],done=it.rows.filter(x=>x.done);
+  if(done.length&&!confirm(`Replace ${EX(it.exId)?.name||'this exercise'} with ${EX(exId).name}? Its ${done.length} logged set${done.length>1?'s':''} in this workout will be deleted.`))return;
+  for(const x of done)if(x.id)await del('sets',x.id);
+  await addItem({exId,n:it.rows.length||3});W.items[P.i]=W.items.pop();   // swap the new item into the old one's place
+  PICK=null;saveW();render();scrollTo(0,P.y)},
  rdec:()=>setRest(W.rest-15),
  rinc:()=>setRest(W.rest+15),
  rstop:()=>{W.restEnd=0;saveW();tickRest()},
