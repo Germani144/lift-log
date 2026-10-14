@@ -1,9 +1,12 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kC+E4sY1gdNzRPAw0nstDL2o5y+P74z6BCznLLkewr4='; style-src 'unsafe-inline'; img-src data:; manifest-src blob:; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-U7aSZWhKcGdeSZPBJxwE1XcS9w3NXxJyGqK/oXXOyjI='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <title>Lift Log</title>
 <style>
 :root{--bg:#eef0f2;--fg:#15191d;--m:#667079;--c:#fff;--bd:#d4d9de;--ac:#1f4fd8;--on:#fff;--wr:#c8340b}
@@ -37,6 +40,12 @@ label{display:block;font-size:13px;color:var(--m);margin:6px 0}
 .rt{flex:1;height:44px;border:0;background:none;font:700 26px system-ui;font-variant-numeric:tabular-nums;color:var(--fg);cursor:pointer}
 .rt.run{color:var(--ac)}.rt.go{color:var(--wr)}
 .bar{height:6px;background:var(--bd);border-radius:3px;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;background:var(--ac)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+.cal .wd{text-align:center;font-size:12px;color:var(--m)}
+.cd{aspect-ratio:1;border:1px solid transparent;border-radius:10px;background:none;font-size:15px;cursor:pointer;font-variant-numeric:tabular-nums}
+.cd.tr{background:var(--ac);color:var(--on);font-weight:700}
+.cd.td{border-color:var(--fg)}
+.cd.sl{outline:2px solid var(--fg);outline-offset:1px}
 .lk{border:0;background:none;color:var(--m);font-size:12px;text-decoration:underline;cursor:pointer;padding:6px 0}
 .inf label{margin:0;display:flex;gap:4px;align-items:center}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--c);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
@@ -215,11 +224,32 @@ function rExd(){const e=E,n=k=>`type=number step=any data-n data-b=${k} value="$
   :'<p class=m>No sets logged.</p>')+`</div>`;
  return h}
 
+const dk=t=>{const d=new Date(t);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+const vol=a=>a.reduce((t,x)=>t+x.w*x.r,0);
+let CAL=null;
+function rCal(g){const now=new Date();CAL??={y:now.getFullYear(),m:now.getMonth(),sel:null};
+ const by={};Object.keys(g).forEach(k=>(by[dk(+k)]??=[]).push(k));
+ const off=(new Date(CAL.y,CAL.m,1).getDay()+6)%7,dim=new Date(CAL.y,CAL.m+1,0).getDate(),today=dk(Date.now()),pre=`${CAL.y}-${String(CAL.m+1).padStart(2,'0')}-`;
+ let cells='<div class=wd>M</div><div class=wd>T</div><div class=wd>W</div><div class=wd>T</div><div class=wd>F</div><div class=wd>S</div><div class=wd>S</div>'+'<i></i>'.repeat(off),n=0;
+ for(let d=1;d<=dim;d++){const key=pre+String(d).padStart(2,'0'),has=by[key];if(has)n+=has.length;
+  cells+=`<button class="cd${has?' tr':''}${key==today?' td':''}${key==CAL.sel?' sl':''}" data-a=calday data-k=${key}>${d}</button>`}
+ const label=new Date(CAL.y,CAL.m,1).toLocaleDateString(undefined,{month:'long',year:'numeric'}),cur=CAL.y==now.getFullYear()&&CAL.m==now.getMonth();
+ return`<div class=card><div class=hd><button class=s style="width:44px" data-a=calnav data-d=-1 aria-label="Previous month">‹</button><b>${label}</b><button class=s style="width:44px" data-a=calnav data-d=1 aria-label="Next month">›</button></div>
+ <div class=m style="text-align:center">${n} workout${n==1?'':'s'} this month${cur?'':' · '}${cur?'':'<button class=lk data-a=caltoday>Today</button>'}</div><div class=cal>${cells}</div></div>`+rDay(g)}
+function rDay(g){if(!CAL.sel)return'<p class=m>Tap a highlighted day to see its workout.</p>';
+ const label=new Date(CAL.sel+'T12:00').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}),
+  ks=Object.keys(g).filter(k=>dk(+k)==CAL.sel).sort((a,b)=>a-b);
+ if(!ks.length)return`<div class=card><b>${label}</b><p class=m>No workout logged.</p></div>`;
+ return ks.map(k=>{const ss=g[k].slice().sort((a,b)=>a.t-b.t),ids=[...new Set(ss.map(s=>s.exId))];
+  return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${label}</span></div><div class=m>${ids.length} exercise${ids.length==1?'':'s'} · ${ss.length} sets · volume ${fmt(vol(ss))}</div>`+
+  ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div style="margin-top:12px"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>vol ${fmt(vol(xs))}</span></div>`+
+   xs.map((s,j)=>`<div class=hl><span class=m>Set ${j+1}</span><span>${wt(s.w)}${s.w>0?' kg':''} × ${s.r}${s.rir!=null?` · RIR ${fmt(s.rir)}`:''}${s.test?' ★':''}</span></div>`).join('')+`</div>`}).join('')+`</div>`}).join('')}
+
 function rHist(){const g={};S.sets.forEach(s=>(g[s.sess]??=[]).push(s));
- const ks=Object.keys(g).sort((a,b)=>b-a),V=a=>a.reduce((t,x)=>t+x.w*x.r,0);
- return`<h2>History</h2><p class=m>Sets read weight × reps @ RIR. Volume = weight × reps.</p>`+(ks.map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),ids=[...new Set(ss.map(s=>s.exId))];
-  return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${dstr(+k)} · vol ${fmt(V(ss))}</span></div>`+
-  ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div class=hl style="display:block"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>vol ${fmt(V(xs))}</span></div><div class=m>${xs.map(s=>`${wt(s.w)}×${s.r}${s.rir!=null?' @'+fmt(s.rir):''}${s.test?' ★':''}`).join(' · ')}</div></div>`}).join('')+
+ const ks=Object.keys(g).sort((a,b)=>b-a);
+ return`<h2>History</h2>`+rCal(g)+`<h2 style="margin-top:22px">All workouts</h2>`+(ks.map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),ids=[...new Set(ss.map(s=>s.exId))];
+  return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${dstr(+k)} · vol ${fmt(vol(ss))}</span></div>`+
+  ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div class=hl style="display:block"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>vol ${fmt(vol(xs))}</span></div><div class=m>${xs.map(s=>`${wt(s.w)}×${s.r}${s.rir!=null?' @'+fmt(s.rir):''}${s.test?' ★':''}`).join(' · ')}</div></div>`}).join('')+
   `<button class=b data-a=wdel data-i=${k}>Delete workout</button></div>`}).join('')||'<p class=m>No workouts logged yet. Sets appear here as soon as you tap ○.</p>')}
 
 function rTpl(){return`<h2>Plans</h2>`+S.tpl.map(t=>`<button class="b big" data-a=tplEdit data-i=${t.id}>${esc(t.name)}<small>${t.days.length} day${t.days.length>1?'s':''}/week · ${t.weeks} weeks${t.active?' · active':''} · ${t.days.map(d=>esc(d.name)).join(', ')}</small></button>`).join('')+`<button class="b p" data-a=tplNew>New weekly plan</button>`}
@@ -312,6 +342,9 @@ const A={
  prAdd:async()=>{const w=+$('#prw').value,d=$('#prd').value;if(!(w>0))return toast('Enter the tested weight');
   await put('pr_history',{exId:E.id,w,t:new Date(d+'T12:00').getTime()});await loadEx(E.id)},
  prDel:async(s,d)=>{await del('pr_history',+d.i);await loadEx(E.id)},
+ calnav:(s,d)=>{let m=CAL.m+ +d.d,y=CAL.y;if(m<0){m=11;y--}else if(m>11){m=0;y++}CAL.m=m;CAL.y=y;CAL.sel=null;render()},
+ caltoday:()=>{const n=new Date();CAL.y=n.getFullYear();CAL.m=n.getMonth();CAL.sel=null;render()},
+ calday:(s,d)=>{CAL.sel=CAL.sel==d.k?null:d.k;render()},
  wdel:async(s,d)=>{if(!confirm('Delete this workout?'))return;for(const x of S.sets.filter(x=>x.sess==d.i))await del('sets',x.id);await load();render()},
  sdel:async(s,d)=>{await del('sets',+d.i);await loadEx(E.id)},
  tplNew:()=>{E={name:'',weeks:8,days:[{name:'Day 1',items:[]}]};S.view={t:'tple'};render()},
@@ -391,9 +424,6 @@ Object.assign(A,{
 addEventListener('online',()=>ghCfg()&&autoBackup());
 
 /* ---------- boot / PWA ---------- */
-try{const m={name:'Lift Log',short_name:'Lift Log',display:'standalone',start_url:location.href.split('#')[0],background_color:'#14171a',theme_color:'#14171a',
- icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#1f4fd8"/><rect x="8" y="28" width="48" height="8" fill="#fff"/><rect x="14" y="16" width="8" height="32" fill="#fff"/><rect x="42" y="16" width="8" height="32" fill="#fff"/></svg>'),sizes:'any',type:'image/svg+xml',purpose:'any'}]};
- const l=document.createElement('link');l.rel='manifest';l.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'}));document.head.append(l)}catch{}
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 navigator.storage?.persist?.();
 open().then(async d=>{db=d;await load();render();if(ghCfg()&&lg('dirty')!='0')setTimeout(autoBackup,3000)}).catch(e=>{app.innerHTML='<main><p class=wr>IndexedDB is unavailable: '+esc(e.message||e)+'</p></main>'});

@@ -1,5 +1,6 @@
-const C='liftlog-v9';
-self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll([new Request('./',{cache:'reload'}),new Request('./index.html',{cache:'reload'})])));self.skipWaiting()});
+const C='liftlog-v10';
+const SHELL=['./','./index.html','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(SHELL.map(u=>new Request(u,{cache:'reload'})))));self.skipWaiting()});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));
 // Network first (so updates show up), cached copy when offline. Same-origin only: GitHub API calls are never touched.
 self.addEventListener('fetch',e=>{const q=e.request;if(q.method!='GET'||new URL(q.url).origin!=location.origin)return;
