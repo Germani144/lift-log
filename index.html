@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kCouJJLTvklNVB7aeLkT6XCQ0BZhS5yeZ/rybPstpPE='; style-src 'unsafe-inline'; img-src data:; manifest-src blob:; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-BVBquwDNkNNU+NyosS2CETpaToVsBlocmWc44hA3qKc='; style-src 'unsafe-inline'; img-src data:; manifest-src blob:; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <title>Lift Log</title>
@@ -126,7 +126,7 @@ function updInfo(s){const it=W.items[s.dataset.i],x=info(it.rows[s.dataset.j],EX
 const opts=id=>S.ex.map(x=>`<option value="${x.id}" ${x.id==id?'selected':''}>${esc(x.name)}</option>`).join('');
 
 function card(it,i){const ex=EX(it.exId);if(!ex)return'';const pr=S.pr[ex.id];
- let h=`<div class=card><div class=hd><b>${esc(ex.name)}</b><span class=m>${pr?`PR ${fmt(pr.w)} · ${age(pr.t)}`:ex.mode=='pct'?'no PR':''}</span></div><div class=m>${esc(it.hint||'')}</div>`;
+ let h=`<div class=card><div class=hd><b style="flex:1">${esc(ex.name)}</b><span class=m>${pr?`PR ${fmt(pr.w)} · ${age(pr.t)}`:ex.mode=='pct'?'no PR':''}</span><button class=s style="width:40px" data-a=rmx data-i=${i} aria-label="Remove exercise">×</button></div><div class=m>${esc(it.hint||'')}</div>`;
  h+=it.rows.map((r,j)=>{const x=info(r,ex),d=r.done?'disabled':'';
   return`<div class="set ${r.done?'dn':''}" data-i=${i} data-j=${j}>
   <button class=s data-a=step data-d=-1 ${d}>−</button><input data-f=w inputmode=decimal placeholder=kg value="${fmt(r.w)}" ${d}>
@@ -218,6 +218,10 @@ const A={
  start:(s,d)=>start(+d.i||null),
  finish:()=>{if(confirm('Finish workout?')){W=null;saveW();render()}},
  addx:async()=>{await addItem({exId:+$('#sx').value,n:3});saveW();render()},
+ rmx:async(s,d)=>{const it=W.items[d.i],done=it.rows.filter(x=>x.done);
+  if(!confirm(done.length?`Remove ${EX(it.exId)?.name||'this exercise'} and delete its ${done.length} logged set(s) from this workout?`:'Remove this exercise from the workout?'))return;
+  for(const x of done)if(x.id)await del('sets',x.id);
+  W.items.splice(+d.i,1);saveW();render()},
  addset:(s,d)=>{const rows=W.items[d.i].rows,l=rows[rows.length-1]||{};rows.push({w:l.w??'',r:l.r??'',p:l.p??''});saveW();render()},
  step:(s,d)=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j];
   r.w=Math.max(0,rnd((+r.w||0)+ +d.d*EX(it.exId).inc,.001));$('[data-f=w]',s).value=fmt(r.w);saveW();updInfo(s)},
