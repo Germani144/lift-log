@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0IYlbXY/NAZo6O865Ni7Uons9wbjoGNOnxw8N6yJAiI='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-uTfZgKlnPSOy4DJzTsZGF+xAZdjVnHgvXShMzRdkkjk='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <link rel="manifest" href="manifest.webmanifest">
@@ -129,7 +129,7 @@ async function addItem(it){const ex=EX(it.exId);if(!ex)return;
  if(!rows.length)rows.push({w:'',r:'',rir:''});
  W.items.push({exId:ex.id,rows,hint})}
 
-async function start(tid,day=0){PICK=null;const t=tid?S.tpl.find(x=>x.id==tid):null,dy=t&&t.days[day];
+async function start(tid,day=0){PICK=null;LAND=false;const t=tid?S.tpl.find(x=>x.id==tid):null,dy=t&&t.days[day];
  W={sess:Date.now(),name:dy?`${t.name} · ${dy.name}`:'Quick workout',pd:dy?`${t.id}:${day}`:undefined,rest:+lg('rest')||120,restEnd:0,items:[]};
  if(dy)for(const it of dy.items)await addItem(it);
  saveW();render()}
@@ -188,6 +188,7 @@ function tickRest(){if(!W)return;
  const b=$('#rt');if(b){b.textContent=restText();b.className=restCls()}}
 setInterval(tickRest,250);
 
+let LAND=false;   // true = show the Train landing page even though a workout is in progress
 let PICK=null,PQ='';   // exercise picker state: {t:'add'|'rep', i, y}
 const sortedEx=()=>S.ex.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
 function pickList(){const q=PQ.trim().toLowerCase(),skip=PICK.t=='rep'?W.items[PICK.i]?.exId:null,
@@ -196,11 +197,12 @@ function pickList(){const q=PQ.trim().toLowerCase(),skip=PICK.t=='rep'?W.items[P
 function rPick(){const old=PICK.t=='rep'?EX(W.items[PICK.i]?.exId):null;
  return`<div class=hd><h2>${PICK.t=='rep'?'Replace '+esc(old?.name||'exercise'):'Add exercise'}</h2><button class=b data-a=pickCancel>Cancel</button></div><input id=pq placeholder="Search exercises" value="${esc(PQ)}" autocomplete=off><div id=plist style="margin-top:8px">${pickList()}</div>`}
 function rTrain(){
- if(!W){const ps=[...S.tpl.filter(t=>t.active),...S.tpl.filter(t=>!t.active)];
-  return`<h2>Train</h2>`+nag()+(ps.map(rPlan).join('')||'<p class=m>No plans yet. Build one in Plans, or start a quick workout.</p>')+`<button class=b data-a=start>Quick workout</button>`}
+ if(!W||LAND){const ps=[...S.tpl.filter(t=>t.active),...S.tpl.filter(t=>!t.active)],
+   cur=W?`<div class=card><div class=hd><b>Workout in progress</b><span class=m>${W.items.reduce((n,i)=>n+i.rows.filter(x=>x.done).length,0)} sets logged</span></div><div class=m>${esc(W.name)}</div><div class=row><button class="b p" data-a=resume>Resume</button><button class=b data-a=finish>Finish</button></div></div>`:'';
+  return`<h2>Train</h2>`+cur+nag()+(ps.map(rPlan).join('')||'<p class=m>No plans yet. Build one in Plans, or start a quick workout.</p>')+`<button class=b data-a=start>Quick workout</button>`}
  if(!W.rest)W.rest=+lg('rest')||120;
  if(PICK)return rPick();
- return`<div class=hd><h2>${esc(W.name)}</h2><button class="b p" data-a=finish>Finish</button></div>`+W.items.map(card).join('')+
+ return`<button class=b data-a=toLanding>‹ Back</button><div class=hd><h2>${esc(W.name)}</h2><button class="b p" data-a=finish>Finish</button></div>`+W.items.map(card).join('')+
  (S.ex.length?`<button class="b p" style="width:100%;margin-top:12px" data-a=pickAdd>+ Add exercise</button>`:'<p class=m>Create exercises first.</p>')+restBar()}
 
 function rEx(){return`<h2>Exercises</h2>`+S.ex.map(e=>{const p=S.pr[e.id];
@@ -307,8 +309,10 @@ const A={
  restore:()=>$('#imp').click(),
  tab:async(s,d)=>{PICK=null;S.tab=d.i;S.view=null;E=null;await load();render()},
  back,
- start:(s,d)=>start(+d.i||null,+d.d||0),
- finish:async()=>{if(confirm('Finish workout?')){W=null;saveW();await load();render()}},
+ start:(s,d)=>{if(W&&!confirm(`You have a workout in progress (${W.name}). Start a new one instead? Sets you already logged stay in History.`))return;start(+d.i||null,+d.d||0)},
+ toLanding:()=>{LAND=true;render();scrollTo(0,0)},
+ resume:()=>{LAND=false;render();scrollTo(0,0)},
+ finish:async()=>{if(confirm('Finish workout?')){W=null;LAND=false;saveW();await load();render()}},
  pickAdd:()=>{PICK={t:'add',y:scrollY};PQ='';render();scrollTo(0,0)},
  repl:(s,d)=>{PICK={t:'rep',i:+d.i,y:scrollY};PQ='';render();scrollTo(0,0)},
  pickCancel:()=>{const y=PICK.y;PICK=null;render();scrollTo(0,y)},
