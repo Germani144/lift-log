@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-vabsKZeqQnDXM/+wRPPlpH7VZkekbuV5Nha+8t7Zhsc='; style-src 'unsafe-inline'; img-src data:; manifest-src blob:; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kC+E4sY1gdNzRPAw0nstDL2o5y+P74z6BCznLLkewr4='; style-src 'unsafe-inline'; img-src data:; manifest-src blob:; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <title>Lift Log</title>
@@ -288,7 +288,7 @@ const A={
   W.items.splice(+d.i,1);saveW();render()},
  addset:(s,d)=>{const rows=W.items[d.i].rows,l=rows[rows.length-1]||{};rows.push({w:l.w??'',r:l.r??'',p:l.p??''});saveW();render()},
  step:(s,d)=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j];
-  r.w=Math.max(0,rnd((+r.w||0)+ +d.d*(EX(it.exId).inc||2.5),.001));$('[data-f=w]',s).value=fmt(r.w);saveW();updInfo(s)},
+  r.w=Math.max(0,rnd((+r.w||0)+ +d.d*(EX(it.exId).inc||2),.001));$('[data-f=w]',s).value=fmt(r.w);saveW();updInfo(s)},
  log:async s=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j],ex=EX(it.exId);
   if(!(r.r>0&&(r.w>0||!(ex.inc>0))))return toast(ex.inc>0?'Enter weight and reps':'Enter reps');
   if(r.test&&r.r!=1)return toast('A 1RM test must be a single (1 rep).');
@@ -300,7 +300,7 @@ const A={
   else if(x.w)toast(`${x.s}. This e1RM is over 3% above your PR. Consider testing a new max.`);
   render()},
  undo:async s=>{const r=W.items[s.dataset.i].rows[s.dataset.j];if(r.id)await del('sets',r.id);r.done=false;delete r.id;saveW();render()},
- exNew:()=>{E={name:'',mode:'rir',inc:2.5,lo:8,hi:12,rir:2};S.prl=[];S.hist=[];S.view={t:'exd'};render()},
+ exNew:()=>{E={name:'',mode:'rir',inc:2,lo:8,hi:12,rir:2};S.prl=[];S.hist=[];S.view={t:'exd'};render()},
  exOpen:async(s,d)=>{E=structuredClone(EX(+d.i));S.view={t:'exd'};await loadEx(E.id)},
  exSave:async()=>{if(!E.name.trim())return toast('Name required');E.inc=+E.inc||0;if(E.inc<0)return toast('Increment can\'t be negative');
   if(E.mode=='rir'){E.lo||=8;E.hi||=Math.max(E.lo,12);E.rir??=2;if(E.hi<E.lo)return toast('Reps max must be at least reps min')}
