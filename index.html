@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-VW0b4hwL90eOyrc/EhVceOM9c5kJYt17mHSBby/I5OQ='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/YnD6ZKJTcbVBKAvluK3QyQHXIDyhS2yJ3B8o7P8ikw='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -321,7 +321,7 @@ function rTrain(){
 let EQ='';   // Exercises tab search text
 const exHit=n=>{n=n.toLowerCase();return EQ.toLowerCase().split(/\s+/).filter(Boolean).every(w=>n.includes(w))};
 function rEx(){return`<div class=hd><h2>Exercises</h2><div class=key><span><i style="background:var(--ac)"></i>RIR</span><span><i style="background:var(--blu)"></i>% of 1RM</span></div></div>`+
- (S.ex.length?`<input id=exq type=search placeholder="Search exercises" value="${esc(EQ)}" autocomplete=off enterkeyhint=search>`:'')+(!S.ex.length&&!S.sets.length&&!ghCfg()?`<div class=card><b>No data here</b><div class=m>If you had a backup, restore it first: enter your token in Automatic backup below and tap Turn on. Don't add anything before restoring.</div></div>`:'')+S.ex.map(e=>{const p=S.pr[e.id];
+ (S.ex.length?`<input id=exq type=search placeholder="Search exercises" value="${esc(EQ)}" autocomplete=off enterkeyhint=search>`:'')+(!S.ex.length&&!S.sets.length&&!ghCfg()?`<div class=card><b>No data here</b><div class=m>If you had a backup, restore it first: enter your token in Automatic backup below and tap Turn on. Don't add anything before restoring.</div></div>`:'')+sortedEx().map(e=>{const p=S.pr[e.id];
  return`<button class="b big exr${e.mode=='pct'?' pct':''}" data-a=exOpen data-i=${e.id} data-q="${esc(e.name.toLowerCase())}"${exHit(e.name)?'':' hidden'}><span class=l>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · ${e.inc>0?'increment '+e.inc:'bodyweight'}</small></span>${p?`<span class=r><b>${fmt(p.w)}<i> kg</i></b><small>1RM ${age(p.t)}${e.pb?' · PB '+fmt(e.pb):''}</small></span>`:e.pb?`<span class=r><small>PB ${fmt(e.pb)}</small></span>`:e.mode=='pct'?'<span class=r><small>No 1RM</small></span>':''}</button>`}).join('')+`<p class=m id=exnone${!S.ex.length||S.ex.some(e=>exHit(e.name))?' hidden':''}>No exercise matches “${esc(EQ)}”.</p><button class="b p" data-a=exNew>New exercise</button>
  ${ghCard()}
  <div class=card><b>Manual backup</b><div class=m>${lastBackup()?'Last backup '+age(lastBackup()):'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
