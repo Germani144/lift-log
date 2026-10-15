@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RuK8Yzf66fpTUFineNdgrlF8kHlaSnmnNLtSfNMPmoA='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-JvC0XZGz/fubBArZCTMk0hd8DdRYrsbU4wY9FNOShoI='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <link rel="manifest" href="manifest.webmanifest">
@@ -57,6 +57,11 @@ nav button.on{color:var(--ac);font-weight:700}
 code{background:var(--bg);padding:1px 4px;border-radius:4px}
 .hl{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd);font-variant-numeric:tabular-nums}
 .hl button{border:0;background:none;color:var(--m);cursor:pointer}
+html,body{min-height:100%;touch-action:pan-y}main{touch-action:pan-y}
+@keyframes slr{from{transform:translateX(40px);opacity:.3}to{transform:none;opacity:1}}@keyframes sll{from{transform:translateX(-40px);opacity:.3}to{transform:none;opacity:1}}
+main.slr{animation:slr .2s ease-out}main.sll{animation:sll .2s ease-out}
+nav button.nx{color:var(--ac);background:rgba(120,150,255,.15)}
+#sh{position:fixed;top:50%;z-index:9;padding:10px 14px;border-radius:20px;background:var(--c);border:1px solid var(--bd);color:var(--m);font-weight:600;pointer-events:none;transform:translateY(-50%);transition:color .1s,border-color .1s}#sh.r{right:10px}#sh.l{left:10px}#sh.go{color:var(--ac);border-color:var(--ac)}
 </style></head>
 <body><div id="app"></div><div id="toast" hidden></div>
 <script>
@@ -288,7 +293,7 @@ function rTple(){const dpw=[1,2,3,4,5,6,7].map(n=>`<option ${n==E.days.length?'s
 
 function render(){
  const v=S.view?.t,body=v=='exd'?rExd():v=='tple'?rTple():{train:rTrain,hist:rHist,tpl:rTpl,ex:rEx}[S.tab]();
- app.innerHTML=`<main>${body}</main><nav>${[['train','Train'],['hist','History'],['tpl','Plans'],['ex','Exercises']].map(([k,l])=>`<button class="${S.tab==k?'on':''}" data-a=tab data-i=${k}>${l}</button>`).join('')}</nav>`}
+ app.innerHTML=`<main${SL?` class=sl${SL>0?'r':'l'}`:''}>${body}</main><nav>${[['train','Train'],['hist','History'],['tpl','Plans'],['ex','Exercises']].map(([k,l])=>`<button class="${S.tab==k?'on':''}" data-a=tab data-i=${k}>${l}</button>`).join('')}</nav>`;SL=0}
 
 /* ---------- events ---------- */
 const setPath=(o,p,v)=>{const k=p.split('.'),l=k.pop();k.forEach(x=>o=o[x]);o[l]=v};
@@ -299,11 +304,22 @@ app.addEventListener('input',e=>{const t=e.target,s=t.closest('.set');
  else if(t.dataset.b&&E)setPath(E,t.dataset.b,t.dataset.n!=null?(t.value===''?'':+t.value):t.value)});
 app.addEventListener('change',e=>{if(e.target.id=='imp')importData(e.target.files[0]);else if(e.target.dataset.dpw!=null)resizeDays(+e.target.value);else if(e.target.dataset.rr!=null)render()});
 app.addEventListener('submit',e=>{if(e.target.id=='ghf'){e.preventDefault();A.ghSave()}});
-let sx,sy,sok;
-app.addEventListener('touchstart',e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY;sok=e.touches.length==1&&!S.view&&!e.target.closest('input,textarea,select,nav,[data-noswipe]')},{passive:true});
-app.addEventListener('touchend',e=>{if(!sok)return;sok=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;
- if(Math.abs(dx)<80||Math.abs(dx)<2*Math.abs(dy))return;
- const T=['train','hist','tpl','ex'],i=T.indexOf(S.tab)+(dx<0?1:-1);if(i>=0&&i<T.length)A.tab(null,{i:T[i]})},{passive:true});
+const TABS=['train','hist','tpl','ex'],TN={train:'Train',hist:'History',tpl:'Plans',ex:'Exercises'};
+let sx,sy,sm,sd,SL=0;const TH=70;
+const hint=()=>{let h=$('#sh');if(!h){h=document.createElement('div');h.id='sh';document.body.appendChild(h)}return h};
+const swEnd=()=>{const m=$('main');if(m){m.style.transition='transform .18s,opacity .18s';m.style.transform='';m.style.opacity=''}$('#sh')?.remove();document.querySelectorAll('nav button.nx').forEach(x=>x.classList.remove('nx'));sm=0};
+document.addEventListener('touchstart',e=>{sm=0;if(e.touches.length!=1||S.view||e.target.closest('input,textarea,select,nav,[data-noswipe]'))return;
+ const t=e.touches[0];sx=t.clientX;sy=t.clientY;sm=1;sd=0;const m=$('main');if(m)m.style.transition='none'},{passive:true});
+document.addEventListener('touchmove',e=>{if(!sm)return;const t=e.touches[0],dx=t.clientX-sx,dy=t.clientY-sy;
+ if(sm==1){if(Math.abs(dy)>12&&Math.abs(dy)>Math.abs(dx)){sm=0;return}if(Math.abs(dx)<10||Math.abs(dx)<Math.abs(dy)*1.2)return;sm=2}
+ const i=TABS.indexOf(S.tab),j=i+(dx<0?1:-1),ok=j>=0&&j<TABS.length,m=$('main');if(!m)return;
+ const k=Math.min(1,Math.abs(dx)/TH);sd=ok?dx:0;
+ m.style.transform=`translateX(${dx*(ok?.55:.15)}px)`;m.style.opacity=ok?1-.35*k:1;
+ document.querySelectorAll('nav button').forEach((x,n)=>x.classList.toggle('nx',ok&&n==j&&k>=1));
+ const h=hint();if(ok){h.textContent=(dx<0?'':'‹ ')+TN[TABS[j]]+(dx<0?' ›':'');h.className=(dx<0?'r ':'l ')+(k>=1?'go':'');h.style.opacity=Math.min(1,k*1.4)}else h.style.opacity=0},{passive:true});
+document.addEventListener('touchend',e=>{if(sm!=2){sm=0;return}const dx=sd,i=TABS.indexOf(S.tab),j=i+(dx<0?1:-1);
+ if(Math.abs(dx)>=TH&&j>=0&&j<TABS.length){$('#sh')?.remove();sm=0;SL=dx<0?1:-1;A.tab(null,{i:TABS[j]})}else swEnd()},{passive:true});
+document.addEventListener('touchcancel',swEnd,{passive:true});
 app.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b&&!b.disabled)A[b.dataset.a]?.(b.closest('.set'),b.dataset)});
 
 async function loadEx(id){S.prl=(await all('pr_history','ex',id)).sort((a,b)=>b.t-a.t);
