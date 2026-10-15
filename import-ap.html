@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-CHksKyhKHJ3+9HeASHPI5YbqTLHYGR0U/mmC0rGbHro='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
+<title>Import from Alpha Progression</title>
+<style>
+@font-face{font-family:BC;font-weight:700;src:url(fonts/barlow-condensed-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:Bw;font-weight:400;src:url(fonts/barlow-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:Bw;font-weight:600;src:url(fonts/barlow-latin-600-normal.woff2) format("woff2")}
+:root{--bg:#12161c;--fg:#eceae4;--m:#8e9aa8;--c:#1b212a;--c2:#262e3a;--ac:#e8372f;--blu:#4a7bea}
+@media(prefers-color-scheme:light){:root{--bg:#eceff3;--fg:#14181e;--m:#5d6a79;--c:#fff;--c2:#e6eaf0;--ac:#d92b24;--blu:#2f60d6}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:400 16px/1.4 Bw,system-ui,sans-serif;padding:14px 14px 60px;max-width:560px;margin:auto}
+h1{font:700 30px/1.05 BC,sans-serif;margin:8px 0 12px}.m{color:var(--m);font-size:13px}.wr{color:#ff8a5c;font-weight:600}
+.card{background:var(--c);border-radius:18px;padding:14px;margin:12px 0}
+.hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.hd b{font:700 20px/1.1 BC,sans-serif}
+select,button{font:inherit;color:inherit;width:100%;min-height:48px;border:0;border-radius:12px;padding:12px;background:var(--bg);margin-top:8px}
+button{background:var(--c2);font-weight:600;cursor:pointer}button.p{background:var(--ac);color:#fff}button:disabled{opacity:.5}
+.row{display:flex;gap:8px}.row>*{flex:1}
+</style></head><body>
+<h1>Import from Alpha Progression</h1>
+<div id=v></div>
+<script>
+const $=s=>document.querySelector(s),v=$('#v');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dstr=t=>new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+const rq=r=>new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+const open=()=>new Promise((res,rej)=>{const r=indexedDB.open('liftlog',1);
+ r.onupgradeneeded=()=>{const d=r.result,o={keyPath:'id',autoIncrement:true};
+  d.createObjectStore('exercises',o);d.createObjectStore('templates',o);
+  d.createObjectStore('pr_history',o).createIndex('ex','exId');
+  d.createObjectStore('sets',o).createIndex('ex','exId')};
+ r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+let db,EXS=[],HAVE=new Set(),AP=null;
+const getAll=n=>rq(db.transaction(n).objectStore(n).getAll());
+const put=(n,o)=>rq(db.transaction(n,'readwrite').objectStore(n).put(o));
+const norm=x=>x.toLowerCase().replace(/[^a-z0-9æøå]/g,'').replace(/s$/,'');
+const num=x=>{const n=parseFloat(String(x).replace(',','.'));return isFinite(n)?n:null};
+function parse(text){const ws=[];let w=null,e=null,cols=[],bad=0;
+ for(const raw of text.replace(/^﻿/,'').split(/\r?\n/)){const l=raw.trim();if(!l)continue;
+  let m=l.match(/^"([^"]*)";"(\d{4})-(\d\d)-(\d\d) (\d{1,2}):(\d\d) h";"/);
+  if(m){w={wn:m[1].slice(0,120),sess:new Date(+m[2],+m[3]-1,+m[4],+m[5],+m[6]).getTime(),ex:[]};e=null;if(isFinite(w.sess))ws.push(w);else bad++;continue}
+  m=l.match(/^"\d+\. ([^"]+)"$/);
+  if(m&&w){const p=m[1].split(' · ');e={name:p[0].trim().slice(0,80),eq:(p[1]||'').trim(),sets:[]};w.ex.push(e);continue}
+  if(l[0]=='#'){cols=l.split(';').map(c=>c.trim().toUpperCase());continue}
+  if(/^\d/.test(l)&&e){const p=l.split(';'),g=k=>{const i=cols.indexOf(k);return i<0?null:p[i]};
+   if((g('REPS')||'').trim()=='-')continue;   // set skipped in Alpha Progression
+   const kg=cols.includes('KG')?num(g('KG')):0,r=num(g('REPS')),rt=(g('RIR')||'').trim();
+   let rir=rt=='-'||rt==''?null:num(rt.replace('+',''));
+   if(kg==null||r==null||!(r>=1&&r<=1000)||kg<0||kg>2000){bad++;continue}
+   if(rir!=null&&!(rir>=0&&rir<=10))rir=null;
+   e.sets.push({w:kg,r:Math.round(r),rir})}}
+ ws.forEach(x=>x.ex=x.ex.filter(y=>y.sets.length));
+ return{ws:ws.filter(x=>x.ex.length),bad}}
+const sortedNames=()=>Object.keys(AP.names).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+function load(text){const d=parse(text);if(!d.ws.length){v.innerHTML='<p class=wr>No workouts found in that file.</p>'+pickHtml();return}
+ const nw=d.ws.filter(x=>!HAVE.has(x.sess)),names={},eqs={};
+ nw.forEach(x=>x.ex.forEach(y=>(eqs[y.name]??=new Set()).add(y.eq)));   // same name, different equipment = different exercise
+ nw.forEach(x=>x.ex.forEach(y=>{y.label=eqs[y.name].size>1&&y.eq?`${y.name} (${y.eq})`:y.name;
+  const n=names[y.label]??={eq:y.eq,n:0,reps:[],bw:true};n.n+=y.sets.length;y.sets.forEach(z=>{n.reps.push(z.r);if(z.w>0)n.bw=false})}));
+ const map={};Object.keys(names).forEach(k=>{const f=EXS.find(x=>norm(x.name)==norm(k));map[k]=f?String(f.id):'new'});
+ AP={all:d.ws.length,nw,names,map,bad:d.bad,from:Math.min(...d.ws.map(x=>x.sess)),to:Math.max(...d.ws.map(x=>x.sess))};show()}
+const pickHtml=()=>'<div class=card><b>Choose your Alpha Progression workouts CSV</b><div class=m>This adds history to Lift Log. Nothing is deleted. Workouts already imported are skipped if you run it twice.</div><button class=p id=pick>Choose file</button><input type=file id=f accept=".csv,text/csv,text/plain" hidden></div>';
+function show(){const nm=sortedNames(),ns=AP.nw.reduce((t,x)=>t+x.ex.reduce((u,y)=>u+y.sets.length,0),0),ex=EXS.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+ v.innerHTML=`<div class=card><b>${AP.nw.length} new workout${AP.nw.length==1?'':'s'} · ${ns} sets</b><div class=m>File covers ${dstr(AP.from)} to ${dstr(AP.to)}. ${AP.all-AP.nw.length?`${AP.all-AP.nw.length} already in Lift Log, skipped. `:''}${AP.bad?`${AP.bad} unreadable row(s) skipped. `:''}Match each exercise to one you already have, or leave it as a new exercise.</div></div>`+
+ (AP.nw.length?nm.map((k,i)=>{const n=AP.names[k];return`<div class=card><div class=hd><b>${esc(k)}</b><span class=m>${n.eq?esc(n.eq)+' · ':''}${n.n} sets</span></div><select data-i=${i} aria-label="Match ${esc(k)}"><option value=new ${AP.map[k]=='new'?'selected':''}>New exercise</option>${ex.map(x=>`<option value=${x.id} ${AP.map[k]==x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>`}).join('')+`<div class=row><button class=p id=go>Import ${ns} sets</button></div>`:'<p class=m>Everything in this file is already in Lift Log.</p>')}
+async function run(){const bt=$('#go');bt.disabled=true;bt.textContent='Importing…';
+ try{const ids={};for(const k of Object.keys(AP.names)){if(AP.map[k]!='new'){ids[k]=+AP.map[k];continue}const n=AP.names[k],r=n.reps.slice().sort((a,b)=>a-b)[n.reps.length>>1];
+   ids[k]=await put('exercises',{name:k,mode:'rir',inc:n.bw?0:n.eq=='Dumbbells'?1:2,lo:Math.max(1,r-2),hi:Math.min(30,r+2),rir:2})}
+  let c=0;for(const w of AP.nw){let q=0;for(const e of w.ex)for(const z of e.sets){await put('sets',{exId:ids[e.label],sess:w.sess,wn:w.wn,t:w.sess+(q++)*1000,w:z.w,r:z.r,rir:z.rir,test:z.r===1&&z.rir===0});c++}}
+  try{localStorage.setItem('dirty','1')}catch{}   // so Lift Log backs this up the next time it opens
+  v.innerHTML=`<div class=card><b>Imported ${AP.nw.length} workouts, ${c} sets</b><div class=m>Open Lift Log and check History. It will back the new data up to GitHub when it opens.</div><button class=p id=back>Open Lift Log</button></div>`}
+ catch(e){v.innerHTML=`<p class=wr>Import stopped: ${esc(e.message||e)}. Sets added before the error are kept. Running it again skips finished workouts.</p>`}}
+v.addEventListener('click',e=>{const t=e.target;if(t.id=='pick')$('#f').click();else if(t.id=='go')run();else if(t.id=='back')location.href='./'});
+v.addEventListener('change',e=>{const t=e.target;if(t.id=='f'){const f=t.files[0];if(!f)return;if(f.size>5e6)return alert('That file is too large');f.text().then(load).catch(()=>alert('Could not read that file'))}
+ else if(t.dataset.i!=null)AP.map[sortedNames()[+t.dataset.i]]=t.value});
+open().then(async d=>{db=d;EXS=await getAll('exercises');HAVE=new Set((await getAll('sets')).map(s=>s.sess));v.innerHTML=pickHtml()}).catch(e=>{v.innerHTML='<p class=wr>Could not open the database: '+esc(e.message||e)+'</p>'});
+</script></body></html>
