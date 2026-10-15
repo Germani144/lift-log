@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-n0BBdeIbkkWKjVSgmkE/A909PEgcmJ8ghNY/Jal+fqI='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-y4Edopn++v/nXPuasy/xVpr1K5NkSWJva9djobS0byA='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -37,7 +37,8 @@ button{-webkit-appearance:none;appearance:none}
 .b.p{background:var(--ac);color:var(--on)}
 .b.big{display:block;width:100%;text-align:left;background:var(--c);margin:8px 0;font-weight:600;font-size:17px;border-radius:16px}
 .b.big small{display:block;font-weight:400;color:var(--m);font-size:13px;margin-top:1px}
-input,select,textarea{width:100%;padding:12px;background:var(--bg);border:0;border-radius:12px;min-height:48px}
+input,select,textarea{width:100%;padding:12px;background:var(--c);border:0;border-radius:12px;min-height:48px}
+.card input,.card select,.card textarea{background:var(--bg)}
 .card .card input,.card .card select,.card .card textarea{background:var(--c)}
 input:focus,select:focus,textarea:focus{outline:0;box-shadow:inset 0 0 0 2px var(--blu)}
 button:focus-visible{outline:2px solid var(--blu);outline-offset:2px}
@@ -81,6 +82,13 @@ label input,label select,label textarea{margin-top:4px}
 .lk{border:0;background:none;color:var(--m);font-size:12px;text-decoration:underline;cursor:pointer;padding:8px 0}
 .inf label{margin:0;display:flex;gap:4px;align-items:center}
 .inf .lk+.lk{margin-left:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.chip{background:var(--c);border:0;border-radius:99px;padding:9px 14px;font-weight:500;cursor:pointer;color:var(--fg);min-height:40px}
+.card .chip{background:var(--c2)}
+.sugg{background:var(--c);border-radius:14px;margin:8px 0;overflow:hidden}
+.card .sugg{background:var(--c2)}
+.sg{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--bd);padding:12px 14px;font-weight:600;cursor:pointer;color:var(--fg);min-height:48px}
+.sg:last-child{border-bottom:0}.sg .m{font-weight:400;flex:none}.sg.new{color:var(--blu)}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--c);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;padding:9px 0 8px;border:0;background:none;font-size:12px;font-weight:500;cursor:pointer;color:var(--m);display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
 nav button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -276,11 +284,27 @@ setInterval(tickRest,250);
 let LAND=false;   // true = show the Train landing page even though a workout is in progress
 let PICK=null,PQ='';   // exercise picker state: {t:'add'|'rep', i, y}
 const sortedEx=()=>S.ex.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+/* ---------- type-to-find exercises (like Home log): most-used chips when empty, ranked matches while typing ---------- */
+let TQ={k:null,q:''},PALL=false;   // plan-editor search (day index + text); picker "show all" toggle
+function exMatches(q,skip){const u={};for(const x of S.sets)u[x.exId]=(u[x.exId]||0)+1;
+ const l=S.ex.filter(e=>e.id!=skip),nm=(a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'});q=q.trim().toLowerCase();
+ if(!q)return[...l.filter(e=>u[e.id]).sort((a,b)=>u[b.id]-u[a.id]||nm(a,b)),...l.filter(e=>!u[e.id]).sort(nm)].slice(0,8);
+ const tier=e=>{const n=e.name.toLowerCase();return n.startsWith(q)?0:n.split(/[\s\-(/]+/).some(w=>w.startsWith(q))?1:n.includes(q)?2:9};
+ return l.map(e=>[e,tier(e)]).filter(x=>x[1]<9).sort((a,b)=>a[1]-b[1]||(u[b[0].id]||0)-(u[a[0].id]||0)||nm(a[0],b[0])).slice(0,8).map(x=>x[0])}
+function exSugg(q,skip,go,mk){const l=exMatches(q,skip),t=q.trim();
+ if(!t)return l.length?`<div class=chips>${l.map(e=>`<button class=chip ${go(e)}>${esc(e.name)}</button>`).join('')}</div>`:'';
+ const exact=S.ex.some(e=>e.name.toLowerCase()==t.toLowerCase());
+ return`<div class=sugg>${l.map(e=>`<button class=sg ${go(e)}><span>${esc(e.name)}</span><span class=m>${e.mode=='pct'?'% of 1RM':`RIR · ${e.lo}–${e.hi}`}</span></button>`).join('')}${exact?'':`<button class="sg new" ${mk}>＋ New exercise “${esc(t.slice(0,80))}”</button>`}</div>`}
+const pickBox=()=>{const skip=PICK.t=='rep'?W.items[PICK.i]?.exId:null;
+ return exSugg(PQ,skip,e=>`data-a=pickGo data-x=${e.id}`,'data-a=pickNew')+(PQ.trim()?'':PALL?`<div style="margin-top:8px">${pickList()}</div>`:`<button class=lk data-a=pickAll>Show all exercises</button>`)};
+const tqBox=k=>exSugg(TQ.k==k?TQ.q:'',null,e=>`data-a=tplPick data-k=${k} data-x=${e.id}`,`data-a=tplPickNew data-k=${k}`);
+const newEx=async name=>{name=name.trim().slice(0,80);if(!name)return null;const id=await put('exercises',{name,mode:'rir',inc:2,lo:8,hi:12,rir:2});
+ await load();toast(`Created ${name}: RIR, 8–12 reps, 2 kg steps. Change it in Exercises.`);return id};
 function pickList(){const q=PQ.trim().toLowerCase(),skip=PICK.t=='rep'?W.items[PICK.i]?.exId:null,
  l=sortedEx().filter(e=>e.id!=skip&&e.name.toLowerCase().includes(q));
  return l.map(e=>`<button class="b big" data-a=pickGo data-x=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':`RIR · ${e.lo}–${e.hi} reps`}</small></button>`).join('')||'<p class=m>No exercise matches.</p>'}
 function rPick(){const old=PICK.t=='rep'?EX(W.items[PICK.i]?.exId):null;
- return`<div class=hd><h2>${PICK.t=='rep'?'Replace '+esc(old?.name||'exercise'):'Add exercise'}</h2><button class=b data-a=pickCancel>Cancel</button></div><input id=pq placeholder="Search exercises" value="${esc(PQ)}" autocomplete=off><div id=plist style="margin-top:8px">${pickList()}</div>`}
+ return`<div class=hd><h2>${PICK.t=='rep'?'Replace '+esc(old?.name||'exercise'):'Add exercise'}</h2><button class=b data-a=pickCancel>Cancel</button></div><input id=pq placeholder="Type an exercise" value="${esc(PQ)}" autocomplete=off enterkeyhint=done><div id=plist>${pickBox()}</div>`}
 function rTrain(){
  if(!W||LAND){const ps=[...S.tpl.filter(t=>t.active),...S.tpl.filter(t=>!t.active)],
    cur=W?`<div class=card><div class=hd><b>Workout in progress</b><span class=m>${W.items.reduce((n,i)=>n+i.rows.filter(x=>x.done).length,0)} sets logged</span></div><div class=m>${esc(W.name)}</div><div class=row><button class="b p" data-a=resume>Resume</button><button class=b data-a=finish>Finish</button></div></div>`:'';
@@ -370,7 +394,7 @@ function rTple(){const dpw=[1,2,3,4,5,6,7].map(n=>`<option ${n==E.days.length?'s
    return`<div class=card style="background:var(--bg)"><div class=row><select data-b="${b}.exId" data-n data-rr>${opts(it.exId)}</select><button class=s style="flex:0 0 40px" data-a=tplDelItem data-k=${k} data-i=${j}>×</button></div>`+
    (ex&&ex.mode=='pct'?`<label>Sets<textarea rows=3 data-b="${b}.text" placeholder="3*80%x5&#10;2*85%x3">${esc(it.text)}</textarea></label>`
     :`<div class=row>${f('n','Sets').replace(/placeholder="[^"]*"/,'')}${f('lo','Reps min')}${f('hi','Reps max')}${f('rir','RIR')}</div>`)+`</div>`}).join('')+
-  `<button class=b data-a=tplAdd data-i=${k}>+ Exercise</button></div>`).join('')+
+  `<input data-tq=${k} placeholder="Add exercise: type a name" autocomplete=off enterkeyhint=done value="${TQ.k==k?esc(TQ.q):''}" style="margin-top:6px"><div id=tqs${k}>${TQ.k==k?tqBox(k):''}</div></div>`).join('')+
  `<div class=row><button class="b p" data-a=tplSave>Save</button>${E.id?'<button class=b data-a=tplDel>Delete</button>':''}</div>`}
 
 /* ---------- phone back gesture / back button: close the open page instead of leaving the app ---------- */
@@ -391,11 +415,16 @@ function render(){
 /* ---------- events ---------- */
 const setPath=(o,p,v)=>{const k=p.split('.'),l=k.pop();k.forEach(x=>o=o[x]);o[l]=v};
 app.addEventListener('input',e=>{const t=e.target,s=t.closest('.set');
- if(t.id=='pq'){PQ=t.value;$('#plist').innerHTML=pickList();return}
+ if(t.id=='pq'){PQ=t.value;$('#plist').innerHTML=pickBox();return}
+ if(t.dataset.tq!=null){TQ={k:+t.dataset.tq,q:t.value};$('#tqs'+t.dataset.tq).innerHTML=tqBox(TQ.k);return}
  if(s&&t.dataset.f){const r=W.items[s.dataset.i].rows[s.dataset.j],f=t.dataset.f;
   r[f]=f=='test'?t.checked:t.value===''?'':+t.value;saveW();updInfo(s)}
  else if(t.dataset.b&&E)setPath(E,t.dataset.b,t.dataset.n!=null?(t.value===''?'':+t.value):t.value)});
 app.addEventListener('change',e=>{if(e.target.id=='imp')importData(e.target.files[0]);else if(e.target.dataset.dpw!=null)resizeDays(+e.target.value);else if(e.target.dataset.rr!=null)render()});
+app.addEventListener('focusin',e=>{const t=e.target;if(t.dataset?.tq==null||TQ.k===+t.dataset.tq)return;
+ const old=TQ.k;TQ={k:+t.dataset.tq,q:t.value};if(old!=null){const ob=$('#tqs'+old);if(ob)ob.innerHTML=''}$('#tqs'+TQ.k).innerHTML=tqBox(TQ.k)});
+app.addEventListener('keydown',e=>{if(e.key!='Enter')return;const t=e.target,box=t.id=='pq'?$('#plist'):t.dataset?.tq!=null?$('#tqs'+t.dataset.tq):null;
+ if(!box)return;e.preventDefault();box.querySelector('.sg,.chip')?.click()});
 app.addEventListener('submit',e=>{if(e.target.id=='ghf'){e.preventDefault();A.ghSave()}});
 const TABS=['train','hist','tpl','ex'],TN={train:'Train',hist:'History',tpl:'Plans',ex:'Exercises'};
 let sx,sy,sm,sd,SL=0;const TH=70;
@@ -428,8 +457,12 @@ const A={
  toLanding:()=>{LAND=true;render();scrollTo(0,0)},
  resume:()=>{LAND=false;render();scrollTo(0,0)},
  finish:async()=>{if(confirm('Finish workout?')){W=null;LAND=false;saveW();await load();render()}},
- pickAdd:()=>{PICK={t:'add',y:scrollY};PQ='';render();scrollTo(0,0)},
- repl:(s,d)=>{PICK={t:'rep',i:+d.i,y:scrollY};PQ='';render();scrollTo(0,0)},
+ pickAdd:()=>{PICK={t:'add',y:scrollY};PQ='';PALL=false;render();scrollTo(0,0);$('#pq')?.focus()},
+ pickAll:()=>{PALL=true;$('#plist').innerHTML=pickBox()},
+ pickNew:async()=>{const id=await newEx($('#pq').value);if(id)A.pickGo(null,{x:id})},
+ tplPick:(s,d)=>{E.days[+d.k].items.push({exId:+d.x,n:3,text:''});TQ={k:+d.k,q:''};render();const q=$(`[data-tq="${d.k}"]`);if(q){q.focus();q.scrollIntoView({block:'center'})}},
+ tplPickNew:async(s,d)=>{const id=await newEx($(`[data-tq="${d.k}"]`).value);if(id)A.tplPick(null,{k:d.k,x:id})},
+ repl:(s,d)=>{PICK={t:'rep',i:+d.i,y:scrollY};PQ='';PALL=false;render();scrollTo(0,0);$('#pq')?.focus()},
  pickCancel:()=>{const y=PICK.y;PICK=null;render();scrollTo(0,y)},
  pickGo:async(s,d)=>{const exId=+d.x,P=PICK;
   if(P.t=='add'){await addItem({exId,n:3});PICK=null;saveW();render();scrollTo(0,document.body.scrollHeight);return}
@@ -504,8 +537,8 @@ const A={
  calday:(s,d)=>{CAL.sel=CAL.sel==d.k?null:d.k;render()},
  wdel:async(s,d)=>{if(!confirm('Delete this workout?'))return;for(const x of S.sets.filter(x=>x.sess==d.i))await del('sets',x.id);await load();render()},
  sdel:async(s,d)=>{await del('sets',+d.i);await loadEx(E.id)},
- tplNew:()=>{E={name:'',weeks:8,days:[{name:'Day 1',items:[]}]};S.view={t:'tple'};render()},
- tplEdit:(s,d)=>{E=structuredClone(S.tpl.find(t=>t.id==d.i));S.view={t:'tple'};render()},
+ tplNew:()=>{TQ={k:null,q:''};E={name:'',weeks:8,days:[{name:'Day 1',items:[]}]};S.view={t:'tple'};render()},
+ tplEdit:(s,d)=>{TQ={k:null,q:''};E=structuredClone(S.tpl.find(t=>t.id==d.i));S.view={t:'tple'};render()},
  tplAdd:(s,d)=>{if(!S.ex.length)return toast('Create an exercise first');E.days[+d.i].items.push({exId:S.ex[0].id,n:3,text:''});render()},
  tplDelItem:(s,d)=>{E.days[+d.k].items.splice(+d.i,1);render()},
  tplSave:async()=>{if(!E.name.trim())return toast('Name required');E.weeks=Math.min(52,Math.max(1,Math.round(+E.weeks||8)));
