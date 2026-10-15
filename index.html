@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-y4Edopn++v/nXPuasy/xVpr1K5NkSWJva9djobS0byA='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wjI+BdrtSnriwPy5J7GGbfzoTCO/qyJa3lkY+WgeKlo='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -89,6 +89,7 @@ label input,label select,label textarea{margin-top:4px}
 .card .sugg{background:var(--c2)}
 .sg{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--bd);padding:12px 14px;font-weight:600;cursor:pointer;color:var(--fg);min-height:48px}
 .sg:last-child{border-bottom:0}.sg .m{font-weight:400;flex:none}.sg.new{color:var(--blu)}
+.b.exsw{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;background:var(--c);font-size:17px}.b.exsw .m{flex:none;font-weight:500}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--c);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;padding:9px 0 8px;border:0;background:none;font-size:12px;font-weight:500;cursor:pointer;color:var(--m);display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
 nav button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -285,7 +286,7 @@ let LAND=false;   // true = show the Train landing page even though a workout is
 let PICK=null,PQ='';   // exercise picker state: {t:'add'|'rep', i, y}
 const sortedEx=()=>S.ex.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
 /* ---------- type-to-find exercises (like Home log): most-used chips when empty, ranked matches while typing ---------- */
-let TQ={k:null,q:''},PALL=false;   // plan-editor search (day index + text); picker "show all" toggle
+let TQ={k:null,q:''},PALL=false,TR=null;   // TR: plan item being replaced {k,j,q}   // plan-editor search (day index + text); picker "show all" toggle
 function exMatches(q,skip){const u={};for(const x of S.sets)u[x.exId]=(u[x.exId]||0)+1;
  const l=S.ex.filter(e=>e.id!=skip),nm=(a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'});q=q.trim().toLowerCase();
  if(!q)return[...l.filter(e=>u[e.id]).sort((a,b)=>u[b.id]-u[a.id]||nm(a,b)),...l.filter(e=>!u[e.id]).sort(nm)].slice(0,8);
@@ -297,6 +298,7 @@ function exSugg(q,skip,go,mk){const l=exMatches(q,skip),t=q.trim();
  return`<div class=sugg>${l.map(e=>`<button class=sg ${go(e)}><span>${esc(e.name)}</span><span class=m>${e.mode=='pct'?'% of 1RM':`RIR · ${e.lo}–${e.hi}`}</span></button>`).join('')}${exact?'':`<button class="sg new" ${mk}>＋ New exercise “${esc(t.slice(0,80))}”</button>`}</div>`}
 const pickBox=()=>{const skip=PICK.t=='rep'?W.items[PICK.i]?.exId:null;
  return exSugg(PQ,skip,e=>`data-a=pickGo data-x=${e.id}`,'data-a=pickNew')+(PQ.trim()?'':PALL?`<div style="margin-top:8px">${pickList()}</div>`:`<button class=lk data-a=pickAll>Show all exercises</button>`)};
+const trBox=()=>{const it=E.days[TR.k].items[TR.j];return exSugg(TR.q,it.exId,e=>`data-a=tplSet data-x=${e.id}`,'data-a=tplSetNew')};
 const tqBox=k=>exSugg(TQ.k==k?TQ.q:'',null,e=>`data-a=tplPick data-k=${k} data-x=${e.id}`,`data-a=tplPickNew data-k=${k}`);
 const newEx=async name=>{name=name.trim().slice(0,80);if(!name)return null;const id=await put('exercises',{name,mode:'rir',inc:2,lo:8,hi:12,rir:2});
  await load();toast(`Created ${name}: RIR, 8–12 reps, 2 kg steps. Change it in Exercises.`);return id};
@@ -391,7 +393,9 @@ function rTple(){const dpw=[1,2,3,4,5,6,7].map(n=>`<option ${n==E.days.length?'s
  <p class=m>RIR exercises: set the number of sets, and optionally a rep range or target RIR for that day (blank = the exercise's default). % of 1RM exercises: one line per group of sets, e.g. <code>3*80%x5</code> = 3 sets of 5 reps at 80% of your tested 1RM.</p>`+
  E.days.map((dy,k)=>`<div class=card><label>Day ${k+1} name<input data-b="days.${k}.name" value="${esc(dy.name)}"></label>`+
   dy.items.map((it,j)=>{const ex=EX(it.exId),b=`days.${k}.items.${j}`,f=(x,l)=>`<label>${l}<input type=number step=any data-n data-b="${b}.${x}" value="${it[x]??''}" placeholder="${ex?ex[x]??'':''}"></label>`;
-   return`<div class=card style="background:var(--bg)"><div class=row><select data-b="${b}.exId" data-n data-rr>${opts(it.exId)}</select><button class=s style="flex:0 0 40px" data-a=tplDelItem data-k=${k} data-i=${j}>×</button></div>`+
+   const sw=TR&&TR.k==k&&TR.j==j;
+   return`<div class=card style="background:var(--bg)">`+(sw?`<div class=row><input data-tr="${k}.${j}" placeholder="Replace ${esc(ex?.name||'exercise')}: type a name" autocomplete=off enterkeyhint=done value="${esc(TR.q)}"><button class=b style="flex:0 0 auto" data-a=tplSwapX>Cancel</button></div><div id=trs>${trBox()}</div>`
+    :`<div class=row><button class="b exsw" data-a=tplSwap data-k=${k} data-i=${j}><span>${esc(ex?.name||'Deleted exercise')}</span><span class=m>⇄ Replace</span></button><button class=s style="flex:0 0 40px" data-a=tplDelItem data-k=${k} data-i=${j} aria-label="Remove exercise">×</button></div>`)+
    (ex&&ex.mode=='pct'?`<label>Sets<textarea rows=3 data-b="${b}.text" placeholder="3*80%x5&#10;2*85%x3">${esc(it.text)}</textarea></label>`
     :`<div class=row>${f('n','Sets').replace(/placeholder="[^"]*"/,'')}${f('lo','Reps min')}${f('hi','Reps max')}${f('rir','RIR')}</div>`)+`</div>`}).join('')+
   `<input data-tq=${k} placeholder="Add exercise: type a name" autocomplete=off enterkeyhint=done value="${TQ.k==k?esc(TQ.q):''}" style="margin-top:6px"><div id=tqs${k}>${TQ.k==k?tqBox(k):''}</div></div>`).join('')+
@@ -416,6 +420,7 @@ function render(){
 const setPath=(o,p,v)=>{const k=p.split('.'),l=k.pop();k.forEach(x=>o=o[x]);o[l]=v};
 app.addEventListener('input',e=>{const t=e.target,s=t.closest('.set');
  if(t.id=='pq'){PQ=t.value;$('#plist').innerHTML=pickBox();return}
+ if(t.dataset.tr!=null&&TR){TR.q=t.value;$('#trs').innerHTML=trBox();return}
  if(t.dataset.tq!=null){TQ={k:+t.dataset.tq,q:t.value};$('#tqs'+t.dataset.tq).innerHTML=tqBox(TQ.k);return}
  if(s&&t.dataset.f){const r=W.items[s.dataset.i].rows[s.dataset.j],f=t.dataset.f;
   r[f]=f=='test'?t.checked:t.value===''?'':+t.value;saveW();updInfo(s)}
@@ -423,7 +428,7 @@ app.addEventListener('input',e=>{const t=e.target,s=t.closest('.set');
 app.addEventListener('change',e=>{if(e.target.id=='imp')importData(e.target.files[0]);else if(e.target.dataset.dpw!=null)resizeDays(+e.target.value);else if(e.target.dataset.rr!=null)render()});
 app.addEventListener('focusin',e=>{const t=e.target;if(t.dataset?.tq==null||TQ.k===+t.dataset.tq)return;
  const old=TQ.k;TQ={k:+t.dataset.tq,q:t.value};if(old!=null){const ob=$('#tqs'+old);if(ob)ob.innerHTML=''}$('#tqs'+TQ.k).innerHTML=tqBox(TQ.k)});
-app.addEventListener('keydown',e=>{if(e.key!='Enter')return;const t=e.target,box=t.id=='pq'?$('#plist'):t.dataset?.tq!=null?$('#tqs'+t.dataset.tq):null;
+app.addEventListener('keydown',e=>{if(e.key!='Enter')return;const t=e.target,box=t.id=='pq'?$('#plist'):t.dataset?.tr!=null?$('#trs'):t.dataset?.tq!=null?$('#tqs'+t.dataset.tq):null;
  if(!box)return;e.preventDefault();box.querySelector('.sg,.chip')?.click()});
 app.addEventListener('submit',e=>{if(e.target.id=='ghf'){e.preventDefault();A.ghSave()}});
 const TABS=['train','hist','tpl','ex'],TN={train:'Train',hist:'History',tpl:'Plans',ex:'Exercises'};
@@ -460,6 +465,10 @@ const A={
  pickAdd:()=>{PICK={t:'add',y:scrollY};PQ='';PALL=false;render();scrollTo(0,0);$('#pq')?.focus()},
  pickAll:()=>{PALL=true;$('#plist').innerHTML=pickBox()},
  pickNew:async()=>{const id=await newEx($('#pq').value);if(id)A.pickGo(null,{x:id})},
+ tplSwap:(s,d)=>{TR={k:+d.k,j:+d.i,q:''};render();const q=$('[data-tr]');if(q){q.focus();q.scrollIntoView({block:'center'})}},
+ tplSwapX:()=>{TR=null;render()},
+ tplSet:(s,d)=>{E.days[TR.k].items[TR.j].exId=+d.x;TR=null;render()},
+ tplSetNew:async()=>{const id=await newEx($('[data-tr]').value);if(id)A.tplSet(null,{x:id})},
  tplPick:(s,d)=>{E.days[+d.k].items.push({exId:+d.x,n:3,text:''});TQ={k:+d.k,q:''};render();const q=$(`[data-tq="${d.k}"]`);if(q){q.focus();q.scrollIntoView({block:'center'})}},
  tplPickNew:async(s,d)=>{const id=await newEx($(`[data-tq="${d.k}"]`).value);if(id)A.tplPick(null,{k:d.k,x:id})},
  repl:(s,d)=>{PICK={t:'rep',i:+d.i,y:scrollY};PQ='';PALL=false;render();scrollTo(0,0);$('#pq')?.focus()},
@@ -537,8 +546,8 @@ const A={
  calday:(s,d)=>{CAL.sel=CAL.sel==d.k?null:d.k;render()},
  wdel:async(s,d)=>{if(!confirm('Delete this workout?'))return;for(const x of S.sets.filter(x=>x.sess==d.i))await del('sets',x.id);await load();render()},
  sdel:async(s,d)=>{await del('sets',+d.i);await loadEx(E.id)},
- tplNew:()=>{TQ={k:null,q:''};E={name:'',weeks:8,days:[{name:'Day 1',items:[]}]};S.view={t:'tple'};render()},
- tplEdit:(s,d)=>{TQ={k:null,q:''};E=structuredClone(S.tpl.find(t=>t.id==d.i));S.view={t:'tple'};render()},
+ tplNew:()=>{TQ={k:null,q:''};TR=null;E={name:'',weeks:8,days:[{name:'Day 1',items:[]}]};S.view={t:'tple'};render()},
+ tplEdit:(s,d)=>{TQ={k:null,q:''};TR=null;E=structuredClone(S.tpl.find(t=>t.id==d.i));S.view={t:'tple'};render()},
  tplAdd:(s,d)=>{if(!S.ex.length)return toast('Create an exercise first');E.days[+d.i].items.push({exId:S.ex[0].id,n:3,text:''});render()},
  tplDelItem:(s,d)=>{E.days[+d.k].items.splice(+d.i,1);render()},
  tplSave:async()=>{if(!E.name.trim())return toast('Name required');E.weeks=Math.min(52,Math.max(1,Math.round(+E.weeks||8)));
