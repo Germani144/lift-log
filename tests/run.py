@@ -70,6 +70,7 @@ class App:
         for k, v in f.items():
             self.fill(f"input[data-b={k}]", v)
         self.click("[data-a=exSave]")
+        self.pg.wait_for_function("n=>!S.view&&S.ex.some(e=>e.name==n)", arg=name, timeout=5000)  # saving is async
 
     def seed_sets(self, ex_name, sessions):
         """sessions: list of lists of (w, r, rir[, warmup]) — oldest first, one day apart."""
@@ -272,6 +273,18 @@ def search_and_order(app):
 
 
 @test
+def bottom_bar_is_never_rebuilt(app):
+    """The bar used to be rebuilt on every render, which made it flicker on tab changes."""
+    app.js("window.__nav=document.querySelector('nav')")
+    for t in ("History", "Plans", "Exercises", "Train", "History"):
+        app.tab(t)
+        ok(app.js("document.querySelector('nav')===window.__nav"), f"bottom bar was rebuilt when opening {t}")
+        eq(app.js("[...document.querySelectorAll('nav button.on')].map(b=>b.dataset.i)"), [app.state()["tab"]], "exactly the current tab is highlighted")
+    app.new_exercise("Bench"); app.click("[data-a=exOpen]"); app.pg.go_back(); app.pg.wait_for_timeout(150)
+    ok(app.js("document.querySelector('nav')===window.__nav"), "bottom bar rebuilt by opening a page")
+
+
+@test
 def swipe_changes_tabs(app):
     cdp = app.ctx.new_cdp_session(app.pg)
 
@@ -282,6 +295,7 @@ def swipe_changes_tabs(app):
         cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); app.pg.wait_for_timeout(300)
 
     swipe(300, 100); eq(app.state()["tab"], "hist")
+    eq(app.js("(m=>[m.style.transform,m.style.opacity])(document.querySelector('main'))"), ["", ""], "no leftover drag offset after a swipe")
     swipe(300, 100); swipe(300, 100); swipe(300, 100); eq(app.state()["tab"], "ex", "stops at the last tab")
     swipe(100, 300); eq(app.state()["tab"], "tpl")
     swipe(200, 230); eq(app.state()["tab"], "tpl", "a short drag does nothing")

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/YnD6ZKJTcbVBKAvluK3QyQHXIDyhS2yJ3B8o7P8ikw='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bRmR3BPd1rKG8agt0A0iJ0JWBxUS8iIhnXSkNlbHuPY='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -90,7 +90,7 @@ label input,label select,label textarea{margin-top:4px}
 .sg{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--bd);padding:12px 14px;font-weight:600;cursor:pointer;color:var(--fg);min-height:48px}
 .sg:last-child{border-bottom:0}.sg .m{font-weight:400;flex:none}.sg.new{color:var(--blu)}
 .b.exsw{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;background:var(--c);font-size:17px}.b.exsw .m{flex:none;font-weight:500}
-nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--c);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:6;will-change:transform;transform:translateZ(0);display:flex;background:var(--c);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;padding:9px 0 8px;border:0;background:none;font-size:12px;font-weight:500;cursor:pointer;color:var(--m);display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
 nav button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{color:var(--fg);font-weight:600}
@@ -417,9 +417,17 @@ addEventListener('popstate',()=>{if(popping){popping=false;return}
  if(PICK)A.pickCancel();else if(S.view)A.back();else A.toLanding()});
 try{history.replaceState({ll:0},'')}catch{}
 
+// The bottom bar is built once and kept; only <main> is redrawn. Rebuilding the bar on every
+// render made it flicker on tab changes (the phone repainted it after long pages like History).
 function render(){
  const v=S.view?.t,body=v=='exd'?rExd():v=='tple'?rTple():{train:rTrain,hist:rHist,tpl:rTpl,ex:rEx}[S.tab]();
- app.innerHTML=`<main${SL?` class=sl${SL>0?'r':'l'}`:''}>${body}</main><nav>${[['train','Train'],['hist','History'],['tpl','Plans'],['ex','Exercises']].map(([k,l])=>`<button class="${S.tab==k?'on':''}" data-a=tab data-i=${k}>${NI[k]}${l}</button>`).join('')}</nav>`;SL=0;navSync()}
+ let m=$('main',app),nav=$('nav',app);
+ if(!m||!nav){app.innerHTML=`<main></main><nav>${[['train','Train'],['hist','History'],['tpl','Plans'],['ex','Exercises']].map(([k,l])=>`<button data-a=tab data-i=${k}>${NI[k]}${l}</button>`).join('')}</nav>`;m=$('main',app);nav=$('nav',app)}
+ m.removeAttribute('style');m.className='';
+ if(SL){void m.offsetWidth;m.className='sl'+(SL>0?'r':'l')}   // restart the slide-in animation
+ m.innerHTML=body;
+ nav.querySelectorAll('button').forEach(b=>{b.classList.toggle('on',b.dataset.i==S.tab);b.classList.remove('nx')});
+ SL=0;navSync()}
 
 /* ---------- events ---------- */
 const setPath=(o,p,v)=>{const k=p.split('.'),l=k.pop();k.forEach(x=>o=o[x]);o[l]=v};
