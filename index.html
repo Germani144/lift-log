@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aC8rZ9RD5+CRUAeaT+pQzoce2Z7nmngwm89Jv7jRjBQ='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-n0BBdeIbkkWKjVSgmkE/A909PEgcmJ8ghNY/Jal+fqI='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -49,6 +49,9 @@ label input,label select,label textarea{margin-top:4px}
 .set input::placeholder{font:400 14px Bw,system-ui,sans-serif;color:var(--m)}
 .set input:focus{background:var(--blud);box-shadow:inset 0 0 0 2px var(--blu)}
 .set.dn{opacity:.6}
+.set.wu input{background:transparent;box-shadow:inset 0 0 0 1px var(--bd)}
+.set.wu .inf>span:first-child{color:var(--blu);font-weight:600}
+.set.wu input:focus{box-shadow:inset 0 0 0 2px var(--blu)}
 .set.dn input{background:transparent;color:var(--m)}
 .set.hdr{margin:10px 0 0;font-size:12px;color:var(--m);text-align:center;font-variant-numeric:normal}
 .set.hdr span{white-space:nowrap}
@@ -77,6 +80,7 @@ label input,label select,label textarea{margin-top:4px}
 .cd.sl{background:var(--ac);color:#fff;outline:0}
 .lk{border:0;background:none;color:var(--m);font-size:12px;text-decoration:underline;cursor:pointer;padding:8px 0}
 .inf label{margin:0;display:flex;gap:4px;align-items:center}
+.inf .lk+.lk{margin-left:14px}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--c);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;padding:9px 0 8px;border:0;background:none;font-size:12px;font-weight:500;cursor:pointer;color:var(--m);display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
 nav button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -161,18 +165,39 @@ const solve=(o,pr,ex)=>({w:pr?rnd(o.pct*pr.w,ex.inc):'',r:o.r,rir:''});
 /* ---------- RIR double progression ---------- */
 // Per set, from the same set last session: reps you could have done at target RIR = reps + RIR - target.
 // Aim one more rep at the same weight; past the top of the range, reset to the bottom reps at a heavier e1RM-based weight.
+/* ---------- suggestions ----------
+ Strength = estimated 1RM averaged over your last 4 sessions (recent ones count more), from working sets only:
+ not warm-ups, RIR known and under 5. Sets in a rep range close to today's target are preferred, so a heavy-triple
+ day doesn't inflate a light-day suggestion. Weight and reps then come from that strength number and the target. */
+const isWork=s=>!s.wu&&s.rir!=null&&s.rir<5&&s.w>0;
+function strength(ss,lo,hi){
+ const est=f=>{const by=new Map();for(const s of ss)if(isWork(s)&&f(s))by.set(s.sess,Math.max(by.get(s.sess)||0,e1(s.w,s.r,s.rir)));
+  const v=[...by.values()].slice(-4);if(!v.length)return null;let a=0,b=0;v.forEach((x,i)=>{const k=i+1;a+=x*k;b+=k});return a/b};
+ return est(s=>s.r>=lo-3&&s.r<=hi+3)??est(()=>true)}
+const RAMP={1:[[.6,5]],2:[[.5,8],[.75,4]],3:[[.45,8],[.65,5],[.85,3]],4:[[.4,8],[.55,5],[.7,3],[.85,2]]};   // warm-up % of working weight, reps
 async function suggest(ex,n){
- const ss=(await all('sets','ex',ex.id)).filter(s=>s.rir!=null&&!s.test).sort((a,b)=>a.t-b.t),rows=[];
- if(!ss.length){for(let i=0;i<n;i++)rows.push({w:'',r:ex.lo,rir:ex.rir});
-  return{rows,hint:`${ex.lo}–${ex.hi} reps @ ${ex.rir} RIR · no history yet`}}
- const last=ss.filter(s=>s.sess==ss[ss.length-1].sess);
- for(let j=0;j<n;j++){const b=last[Math.min(j,last.length-1)];
-  const next=Math.round(b.r+b.rir-ex.rir)+1;let w=b.w,r=next;
-  if(!(ex.inc>0))r=Math.max(ex.lo,next);
-  else if(next>ex.hi||next<ex.lo){r=ex.lo;w=rnd(b.w/pct(b.r,b.rir)*pct(ex.lo,ex.rir),ex.inc);
-   if(next>ex.hi&&w<=b.w)w=rnd(b.w+ex.inc,ex.inc)}
-  rows.push({w:rnd(w,ex.inc),r,rir:ex.rir})}
- return{rows,hint:`Last: ${last.map(s=>`${wt(s.w)}×${s.r} @${fmt(s.rir)}`).join(', ')} · ${ex.lo}–${ex.hi} reps @ ${ex.rir} RIR`}}
+ const ss=(await all('sets','ex',ex.id)).filter(s=>!s.wu).sort((a,b)=>a.t-b.t),rows=[],aim=`${ex.lo}–${ex.hi} reps @ ${ex.rir} RIR`,
+  sess=[...new Set(ss.map(s=>s.sess))],fat=j=>Math.floor(j/2);   // later sets: about 1 rep fewer every 2 sets
+ const lastS=ss.filter(s=>s.sess==sess[sess.length-1]),hint=lastS.length?`Last: ${lastS.map(s=>`${wt(s.w)}×${s.r}${s.rir!=null?' @'+fmt(s.rir):''}`).join(', ')} · ${aim}`:`${aim} · no history yet`;
+ if(!(ex.inc>0)){   // bodyweight: progress reps
+  const by=new Map();for(const s of ss)if(!s.wu&&s.rir!=null&&s.rir<5)by.set(s.sess,Math.max(by.get(s.sess)||0,s.r+s.rir));
+  const v=[...by.values()].slice(-4);let cap=null;if(v.length){let a=0,b=0;v.forEach((x,i)=>{a+=x*(i+1);b+=i+1});cap=a/b}
+  const lb=lastS.filter(s=>s.rir!=null&&s.rir<5).reduce((m,s)=>Math.max(m,s.r+s.rir),0),
+   w=lastS.length?Math.max(...lastS.map(s=>s.w)):'',rS=cap==null?null:Math.round(cap-ex.rir),
+   r=rS==null?ex.lo:Math.max(ex.lo,lb?Math.min(rS+2,Math.max(rS,Math.round(lb-ex.rir)+1)):rS+1);
+  for(let j=0;j<n;j++)rows.push({w:w||'',r:Math.max(ex.lo,r-fat(j)),rir:ex.rir});return{rows,hint}}
+ const E=strength(ss,ex.lo,ex.hi);
+ if(!E){for(let j=0;j<n;j++)rows.push({w:'',r:ex.lo,rir:ex.rir});return{rows,hint}}
+ let Wb=null,bt=null;   // the weight you last used in today's rep range, and that set
+ for(let k=sess.length-1;k>=0&&Wb==null;k--){const t=ss.filter(s=>s.sess==sess[k]&&isWork(s)&&s.r>=ex.lo&&s.r<=ex.hi).sort((a,b)=>b.w-a.w||b.r-a.r)[0];if(t){Wb=t.w;bt=t}}
+ let w,r;
+ if(Wb!=null){const rS=Math.round(30*(E/Wb-1)-ex.rir);   // reps the averaged strength says you can do at that weight
+  r=Math.min(rS+2,Math.max(rS,Math.round(bt.r+bt.rir-ex.rir)+1));w=Wb;   // one more than last time, kept within the average's guard rails
+  if(r>ex.hi){r=ex.lo;w=Math.max(rnd(E*pct(ex.lo,ex.rir),ex.inc),rnd(Wb+ex.inc,ex.inc))}
+  else if(r<ex.lo){r=ex.lo;w=Math.min(rnd(E*pct(ex.lo,ex.rir),ex.inc),rnd(Wb-ex.inc,ex.inc))}}
+ else{r=ex.lo;w=rnd(E*pct(ex.lo,ex.rir),ex.inc)}
+ for(let j=0;j<n;j++)rows.push({w:w>0?w:'',r:Math.max(ex.lo,r-fat(j)),rir:ex.rir});
+ return{rows,hint}}
 
 async function addItem(it){const ex=EX(it.exId);if(!ex)return;
  let rows=[],hint='';const pr=S.pr[ex.id],pk=(a,b)=>a===''||a==null?b:a;
@@ -180,6 +205,8 @@ async function addItem(it){const ex=EX(it.exId);if(!ex)return;
  else{for(const l of (it.text||'').split('\n'))for(const o of parse(l)||[])rows.push(solve(o,pr,ex));
   hint=pr?'Weights are % of your tested 1RM':'No tested 1RM yet. Add one in Exercises.'}
  if(!rows.length)rows.push({w:'',r:'',rir:''});
+ const nw=Math.min(4,Math.max(0,Math.round(+ex.wu||0)));
+ if(nw){const w0=+rows[0].w||0;rows.unshift(...RAMP[nw].map(([p,r])=>({w:w0&&ex.inc>0?rnd(w0*p,ex.inc):'',r,rir:'',wu:true})))}
  W.items.push({exId:ex.id,rows,hint})}
 
 async function start(tid,day=0){PICK=null;LAND=false;const t=tid?S.tpl.find(x=>x.id==tid):null,dy=t&&t.days[day];
@@ -188,7 +215,7 @@ async function start(tid,day=0){PICK=null;LAND=false;const t=tid?S.tpl.find(x=>x
  saveW();render()}
 
 /* ---------- row info: e1RM + PR check ---------- */
-function info(r,ex){const pr=S.pr[ex.id];
+function info(r,ex){const pr=S.pr[ex.id];if(r.wu)return{s:'Warm-up',w:0};
  if(!(r.w>0&&r.r>0&&hasR(r)))return{s:'',w:0};
  if(isTest(r)){let s='Counts as a 1RM';if(pr){const d=(r.w/pr.w-1)*100;s+=` · ${d>=0?'+':''}${d.toFixed(1)}% vs 1RM`}return{s,w:0}}
  const e=e1(r.w,r.r,r.rir);let s='e1RM '+fmt(e);
@@ -203,12 +230,12 @@ const opts=id=>S.ex.map(x=>`<option value="${x.id}" ${x.id==id?'selected':''}>${
 function card(it,i){const ex=EX(it.exId);if(!ex)return'';const pr=S.pr[ex.id];
  let h=`<div class=card><div class=hd><b style="flex:1">${esc(ex.name)}</b><span class=m>${pr?`1RM ${fmt(pr.w)} · ${age(pr.t)}`:ex.mode=='pct'?'no 1RM':''}</span><button class=s style="width:40px" data-a=rmx data-i=${i} aria-label="Remove exercise">×</button></div><div class=m>${esc(it.hint||'')}</div>`;
  h+=`<div class="set hdr"><span></span><span>Weight (kg)</span><span></span><span>Reps</span><span>RIR</span><span></span></div>`+it.rows.map((r,j)=>{const x=info(r,ex),d=r.done?'disabled':'';
-  return`<div class="set ${r.done?'dn':''}" data-i=${i} data-j=${j}>
+  return`<div class="set ${r.done?'dn':''}${r.wu?' wu':''}" data-i=${i} data-j=${j}>
   <button class=s data-a=step data-d=-1 ${d}>−</button><input data-f=w inputmode=decimal placeholder=kg aria-label="Weight in kg" value="${fmt(r.w)}" ${d}>
   <button class=s data-a=step data-d=1 ${d}>+</button>
   <input data-f=r inputmode=numeric placeholder=reps aria-label=Reps value="${fmt(r.r)}" ${d}><input data-f=rir inputmode=decimal placeholder=RIR aria-label="Reps in reserve" value="${fmt(r.rir)}" ${d}>
   <button class="ck ${r.done?'on':''}" data-a=${r.done?'undo':'log'} aria-label="${r.done?'Undo set':'Log set'}">${r.done?'✓':'○'}</button>
-  <div class=inf><span class="${x.w?'wr':''}">${x.s}</span><button class=lk data-a=rms>Remove set</button></div></div>`}).join('');
+  <div class=inf><span class="${x.w?'wr':''}">${x.s}</span><span><button class=lk data-a=wu>${r.wu?'Make working set':'Mark as warm-up'}</button> <button class=lk data-a=rms>Remove set</button></span></div></div>`}).join('');
  return h+`<div class=row><button class=b data-a=addset data-i=${i}>+ Set</button><button class=b data-a=repl data-i=${i}>⇄ Replace</button></div></div>`}
 
 function lastBackup(){try{return +localStorage.getItem('lb')||0}catch{return 0}}
@@ -283,6 +310,7 @@ function rExd(){const e=E;if(e.cur===undefined)e.cur=e.id?S.pr[e.id]?.w??'':'';c
  <label>Name<input data-b=name value="${esc(e.name)}"></label>
  <label>Tracking<select data-b=mode data-rr><option value=rir ${e.mode=='rir'?'selected':''}>RIR + weight + reps (auto-suggest)</option><option value=pct ${e.mode=='pct'?'selected':''}>% of tested 1RM × reps</option></select></label>
  <label>Weight increment (0 = bodyweight)<input ${n('inc')}></label>
+ <label>Warm-up sets added before working sets (0–4)<input ${n('wu')} min=0 max=4 placeholder=0></label>
  <div class=row><label>Current 1RM (kg)<input ${n('cur')}></label><label>Lifetime PB (kg)<input ${n('pb')}></label></div>
  <div class=m>Current 1RM sets your % weights. Lifetime PB is your best ever, and it rises on its own when you beat it.</div>`+
  (e.mode=='rir'?`<div class=row><label>Reps min<input ${n('lo')}></label><label>Reps max<input ${n('hi')}></label><label>Target RIR<input ${n('rir')}></label></div>`:'')+
@@ -295,7 +323,7 @@ function rExd(){const e=E;if(e.cur===undefined)e.cur=e.id?S.pr[e.id]?.w??'':'';c
  h+=`<div class=card><b>History</b>`+(ses.length?
   chart('Max weight per session (kg)',ses.map(x=>x.top.w).reverse(),ses.map(x=>x.t).reverse())+chart('Volume per session (reps)',ses.map(x=>x.vol).reverse(),ses.map(x=>x.t).reverse(),1)+
   ses.map(x=>`<div class=card style="margin:8px 0"><div class=hd><b>${dstr(x.t)}</b><span class=m>volume ${x.vol} reps</span></div><div class=m>Top set ${wt(x.top.w)}×${x.top.r}${x.e?` · best e1RM ${fmt(x.e)}`:''}</div>`+
-   x.ss.map(s=>`<div class=hl><span>${wt(s.w)} × ${s.r}${s.rir!=null?` @ ${fmt(s.rir)} RIR`:''}${s.test?' ★test':''}</span><button data-a=sdel data-i=${s.id}>×</button></div>`).join('')+`</div>`).join('')
+   x.ss.map(s=>`<div class=hl><span>${wt(s.w)} × ${s.r}${s.rir!=null?` @ ${fmt(s.rir)} RIR`:''}${s.test?' ★test':''}${s.wu?' <span class=m>warm-up</span>':''}</span><button data-a=sdel data-i=${s.id}>×</button></div>`).join('')+`</div>`).join('')
   :'<p class=m>No sets logged.</p>')+`</div>`;
  return h}
 
@@ -318,7 +346,7 @@ function rDay(g){if(!CAL.sel)return'<p class=m>Tap a highlighted day to see its 
  return ks.map(k=>{const ss=g[k].slice().sort((a,b)=>a.t-b.t),ids=[...new Set(ss.map(s=>s.exId))];
   return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${label}</span></div><div class=m>${ids.length} exercise${ids.length==1?'':'s'} · ${ss.length} sets · volume ${vol(ss)} reps</div>`+
   ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div style="margin-top:12px"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>${vol(xs)} reps</span></div>`+
-   xs.map((s,j)=>`<div class=hl><span class=m>Set ${j+1}</span><span>${wt(s.w)}${s.w>0?' kg':''} × ${s.r}${s.rir!=null?` · RIR ${fmt(s.rir)}`:''}${s.test?' ★':''}</span></div>`).join('')+`</div>`}).join('')+`</div>`}).join('')}
+   xs.map((s,j)=>`<div class=hl><span class=m>${s.wu?'Warm-up':'Set '+(xs.slice(0,j+1).filter(y=>!y.wu).length)}</span><span>${wt(s.w)}${s.w>0?' kg':''} × ${s.r}${s.rir!=null?` · RIR ${fmt(s.rir)}`:''}${s.test?' ★':''}</span></div>`).join('')+`</div>`}).join('')+`</div>`}).join('')}
 
 function rHist(){const g={};S.sets.forEach(s=>(g[s.sess]??=[]).push(s));
  const ks=Object.keys(g).sort((a,b)=>b-a);
@@ -408,7 +436,7 @@ const A={
   const it=W.items[P.i],done=it.rows.filter(x=>x.done);
   if(done.length&&!confirm(`Replace ${EX(it.exId)?.name||'this exercise'} with ${EX(exId).name}? Its ${done.length} logged set${done.length>1?'s':''} in this workout will be deleted.`))return;
   for(const x of done)if(x.id)await del('sets',x.id);
-  await addItem({exId,n:it.rows.length||3});W.items[P.i]=W.items.pop();   // swap the new item into the old one's place
+  await addItem({exId,n:it.rows.filter(x=>!x.wu).length||3});W.items[P.i]=W.items.pop();   // swap the new item into the old one's place
   PICK=null;saveW();render();scrollTo(0,P.y)},
  rdec:()=>setRest(W.rest-15),
  rinc:()=>setRest(W.rest+15),
@@ -437,8 +465,8 @@ const A={
  log:async s=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j],ex=EX(it.exId);
   if(!(r.r>0&&(r.w>0||!(ex.inc>0))))return toast(ex.inc>0?'Enter weight and reps':'Enter reps');
   if(r.rir!==''&&r.rir!=null&&!(+r.rir>=0&&+r.rir<=10))return toast('RIR must be between 0 and 10. Leave it blank if you don\'t track it.');
-  const test=isTest(r);
-  const rec={exId:ex.id,sess:W.sess,wn:W.name,pd:W.pd,t:Date.now(),w:+r.w||0,r:r.r,rir:hasR(r)?r.rir:null,test};
+  const test=!r.wu&&isTest(r);
+  const rec={exId:ex.id,sess:W.sess,wn:W.name,pd:W.pd,t:Date.now(),w:+r.w||0,r:r.r,rir:hasR(r)?r.rir:null,test};if(r.wu)rec.wu=true;
   r.id=await put('sets',rec);r.done=true;saveW();startRest();
   const x=info(r,ex),pr=S.pr[ex.id];
   if(test){const pb=ex.pb||0,beat=r.w>pb;if(beat)await put('exercises',{...ex,pb:r.w});
@@ -447,11 +475,15 @@ const A={
    await load()}
   else if(x.w)toast(`${x.s}. This e1RM is over 3% above your 1RM. Consider testing a new max.`);
   render()},
+ wu:async s=>{const r=W.items[s.dataset.i].rows[s.dataset.j];r.wu=!r.wu;if(!r.wu)delete r.wu;
+  if(r.done&&r.id){const x=await rq(st('sets').get(r.id));if(x){if(r.wu){x.wu=true;x.test=false}else{delete x.wu;x.test=isTest(x)}await put('sets',x)}}
+  saveW();render()},
  undo:async s=>{const r=W.items[s.dataset.i].rows[s.dataset.j];if(r.id)await del('sets',r.id);r.done=false;delete r.id;saveW();render()},
  exNew:()=>{E={name:'',mode:'rir',inc:2,lo:8,hi:12,rir:2};S.prl=[];S.hist=[];S.view={t:'exd'};render()},
  exOpen:async(s,d)=>{E=structuredClone(EX(+d.i));S.view={t:'exd'};await loadEx(E.id)},
  exSave:async()=>{if(!E.name.trim())return toast('Name required');E.inc=+E.inc||0;if(E.inc<0)return toast('Increment can\'t be negative');
   if(E.mode=='rir'){E.lo||=8;E.hi||=Math.max(E.lo,12);E.rir??=2;if(E.hi<E.lo)return toast('Reps max must be at least reps min')}
+  E.wu=Math.min(4,Math.max(0,Math.round(+E.wu||0)));if(!E.wu)delete E.wu;
   const cur=+E.cur||0;delete E.cur;
   if(E.pb===''||E.pb==null||!(+E.pb>0))delete E.pb;else E.pb=+E.pb;
   if(cur>0&&!(E.pb>=cur))E.pb=cur;   // PB can't be below your current 1RM
@@ -499,10 +531,10 @@ function clean(d){
   arr=(o,n,max=2e5)=>{if(!Array.isArray(o[n])||o[n].length>max)throw new Error('bad '+n);return o[n]};
  return{t:opt(d.t)??Date.now(),
   exercises:arr(d,'exercises').map(e=>{if(!['rir','pct'].includes(e.mode))throw new Error('bad mode');
-   return{id:num(e.id,'id'),name:str(e.name,'name'),mode:e.mode,inc:num(e.inc,'inc'),lo:opt(e.lo),hi:opt(e.hi),rir:opt(e.rir),pb:opt(e.pb)}}),
+   return{id:num(e.id,'id'),name:str(e.name,'name'),mode:e.mode,inc:num(e.inc,'inc'),lo:opt(e.lo),hi:opt(e.hi),rir:opt(e.rir),pb:opt(e.pb),wu:opt(e.wu)}}),
   templates:arr(d,'templates').map(t=>({id:num(t.id,'id'),name:str(t.name,'name'),weeks:opt(t.weeks),active:t.active===true,runStart:opt(t.runStart),days:arr(Array.isArray(t.days)?t:{days:[{name:'Day 1',items:t.items}]},'days',14).map(y=>({name:str(y.name,'name'),items:arr(y,'items',200).map(i=>({exId:num(i.exId,'exId'),n:opt(i.n),lo:opt(i.lo),hi:opt(i.hi),rir:opt(i.rir),text:typeof i.text=='string'?i.text.slice(0,2000):''}))}))})),
   pr_history:arr(d,'pr_history').map(p=>({id:num(p.id,'id'),exId:num(p.exId,'exId'),w:num(p.w,'w'),t:num(p.t,'t'),setId:opt(p.setId)})),
-  sets:arr(d,'sets').map(s=>({id:num(s.id,'id'),exId:num(s.exId,'exId'),sess:num(s.sess,'sess'),t:num(s.t,'t'),w:num(s.w,'w'),r:num(s.r,'r'),rir:s.rir==null?null:num(s.rir,'rir'),test:s.test===true,wn:typeof s.wn=='string'?s.wn.slice(0,100):undefined,pd:typeof s.pd=='string'&&/^\d+:\d+$/.test(s.pd)?s.pd:undefined}))}}
+  sets:arr(d,'sets').map(s=>({id:num(s.id,'id'),exId:num(s.exId,'exId'),sess:num(s.sess,'sess'),t:num(s.t,'t'),w:num(s.w,'w'),r:num(s.r,'r'),rir:s.rir==null?null:num(s.rir,'rir'),test:s.test===true,wu:s.wu===true?true:undefined,wn:typeof s.wn=='string'?s.wn.slice(0,100):undefined,pd:typeof s.pd=='string'&&/^\d+:\d+$/.test(s.pd)?s.pd:undefined}))}}
 async function importData(f){if(!f)return;let d;
  try{d=JSON.parse(await f.text());if(d.app!='liftlog'||!STORES.every(n=>Array.isArray(d[n])))throw 0}catch{return toast('Not a Lift Log backup file')}
  await applyBackup(d)}
