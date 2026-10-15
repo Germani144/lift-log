@@ -25,6 +25,7 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
    python3 tools/build.py
    ```
    Skipping this step blanks the app, because the browser refuses to run a script whose hash doesn't match.
+   It also bumps the version number (shown as e.g. **v1.4** on the startup screen and at the bottom of the Exercises tab) whenever the app changed since the last commit, so every pushed update has its own number.
 3. Run the tests:
    ```
    pip install playwright && python3 -m playwright install chromium   # once

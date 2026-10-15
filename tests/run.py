@@ -112,6 +112,15 @@ def loads_without_errors(app):
 
 
 @test
+def version_is_shown(app):
+    v = app.js("VER")
+    ok(__import__("re").fullmatch(r"\d+\.\d+", v), f"VER should look like 1.4, got {v!r}")
+    eq(app.js("document.getElementById('sver')?.textContent"), "v" + v, "splash shows the version")
+    app.tab("Exercises")
+    ok(f"Lift Log v{v}" in app.pg.inner_text("main"), "Exercises tab shows the version")
+
+
+@test
 def main_flow(app):
     """Exercises -> plan -> workout (log, undo, add/remove set, rest timer, replace) -> finish -> history."""
     app.new_exercise("Weighted dips", inc=2)

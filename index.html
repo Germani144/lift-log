@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-prc/Oo62KodJaYnH0iTs59nKMGpjI1j92BIOrH7vzEE='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-qR2lnT3oitJZzAJWT97Qsh7yDI7h4LbBI6e7FkH5ngw='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -121,18 +121,21 @@ nav button.nx{color:var(--fg);background:var(--c2)}
 #splash img{border-radius:30px;box-shadow:0 18px 50px var(--sh)}
 #splash b{font:700 40px/1 BC,system-ui,sans-serif;margin-top:20px;letter-spacing:.3px}
 #splash .bb{width:150px;margin-top:24px}
+#sver{color:var(--m);font-size:14px;margin-top:6px;font-variant-numeric:tabular-nums}
+.ver{text-align:center;margin:18px 0 0}
 #splash .shaft i{animation:ld 1s ease-out forwards}
 #splash .shaft i:nth-child(2){animation-delay:.12s}#splash .shaft i:nth-child(3){animation-delay:.24s}#splash .shaft i:nth-child(4){animation-delay:.36s}#splash .shaft i:nth-child(5){animation-delay:.48s}
 @keyframes ld{from{background:var(--bd)}to{background:var(--fg)}}
 @media(prefers-reduced-motion:reduce){main.slr,main.sll,#splash .shaft i{animation:none}#splash{transition:none}}
 </style></head>
-<body><div id="splash" aria-hidden="true"><img src="icon-192.png" width="132" height="132" alt=""><b>Lift Log</b><div class="bb"><i class="pl pb"></i><i class="pl pr"></i><i class="sl"></i><div class="shaft"><i></i><i></i><i></i><i></i><i></i></div><i class="sl"></i><i class="pl pr"></i><i class="pl pb"></i></div></div><div id="app"></div><div id="toast" hidden></div>
+<body><div id="splash" aria-hidden="true"><img src="icon-192.png" width="132" height="132" alt=""><b>Lift Log</b><span id="sver"></span><div class="bb"><i class="pl pb"></i><i class="pl pr"></i><i class="sl"></i><div class="shaft"><i></i><i></i><i></i><i></i><i></i></div><i class="sl"></i><i class="pl pr"></i><i class="pl pb"></i></div></div><div id="app"></div><div id="toast" hidden></div>
 <script>
 const $=(s,e=document)=>e.querySelector(s), app=$('#app');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const bb=(n,done,cur,label)=>`<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({length:n},(_,i)=>`<i${i<done?' class=d':cur&&i==done?' class=n':''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NI={train:'<svg viewBox="0 0 24 24"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',hist:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',tpl:'<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',ex:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>'};
 const scTo=(x,y)=>{const m=$('main');if(m)m.scrollTop=y},scY=()=>$('main')?.scrollTop||0;   // the page scrolls inside <main>, not the window
+const VER='1.0';   // app version, bumped automatically by tools/build.py on every change
 const fmt=x=>x===''||x==null||isNaN(x)?'':+(+x).toFixed(2);
 const age=t=>{const d=Math.floor((Date.now()-t)/864e5);return d<1?'today':d<60?d+'d ago':Math.round(d/30.4)+'mo ago'};
 const dstr=t=>new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
@@ -328,7 +331,8 @@ function rEx(){return`<div class=hd><h2>Exercises</h2><div class=key><span><i st
  return`<button class="b big exr${e.mode=='pct'?' pct':''}" data-a=exOpen data-i=${e.id} data-q="${esc(e.name.toLowerCase())}"${exHit(e.name)?'':' hidden'}><span class=l>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · ${e.inc>0?'increment '+e.inc:'bodyweight'}</small></span>${p?`<span class=r><b>${fmt(p.w)}<i> kg</i></b><small>1RM ${age(p.t)}${e.pb?' · PB '+fmt(e.pb):''}</small></span>`:e.pb?`<span class=r><small>PB ${fmt(e.pb)}</small></span>`:e.mode=='pct'?'<span class=r><small>No 1RM</small></span>':''}</button>`}).join('')+`<p class=m id=exnone${!S.ex.length||S.ex.some(e=>exHit(e.name))?' hidden':''}>No exercise matches “${esc(EQ)}”.</p><button class="b p" data-a=exNew>New exercise</button>
  ${ghCard()}
  <div class=card><b>Manual backup</b><div class=m>${lastBackup()?'Last backup '+age(lastBackup()):'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
- <div class=row><button class=b data-a=backup>Export</button><button class=b data-a=restore>Import</button></div><input type=file id=imp accept=".json,application/json" hidden></div>`}
+ <div class=row><button class=b data-a=backup>Export</button><button class=b data-a=restore>Import</button></div><input type=file id=imp accept=".json,application/json" hidden></div>
+ <p class="m ver">Lift Log v${VER}</p>`}
 
 function sessions(sets){const g={};sets.forEach(s=>(g[s.sess]??=[]).push(s));
  return Object.keys(g).map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),es=ss.filter(s=>s.rir!=null&&!s.test).map(s=>e1(s.w,s.r,s.rir));
@@ -648,6 +652,7 @@ addEventListener('online',()=>ghCfg()&&autoBackup());
 /* ---------- boot / PWA ---------- */
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 navigator.storage?.persist?.();
+$('#sver').textContent='v'+VER;
 const hideSplash=()=>{const e=$('#splash');if(!e)return;e.classList.add('out');setTimeout(()=>e.remove(),500)};
 setTimeout(hideSplash,5000);
 open().then(async d=>{db=d;await load();render();setTimeout(hideSplash,Math.max(0,1000-performance.now()));if(ghCfg()&&lg('dirty')!='0')setTimeout(autoBackup,3000)}).catch(e=>{hideSplash();app.innerHTML='<main><p class=wr>IndexedDB is unavailable: '+esc(e.message||e)+'</p></main>'});

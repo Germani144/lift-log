@@ -8,13 +8,15 @@ Run after editing any app file:
 What it does
   1. Recomputes the sha256 hash of the inline <script> and writes it into the Content-Security-Policy.
      If this hash is wrong the browser refuses to run the app and you get a blank screen.
-  2. Sets the service-worker cache name to a hash of the app files, so phones always pick up a new
+  2. Bumps the app version (const VER='1.4' -> '1.5', shown in the app as v1.5) whenever the app
+     differs from the last commit, so every update you push has its own number.
+  3. Sets the service-worker cache name to a hash of the app files, so phones always pick up a new
      version (no more manual "v23 -> v24" bumps).
-  3. Security checks: strict CSP (no unsafe-inline/unsafe-eval for scripts, nothing loaded from other
+  4. Security checks: strict CSP (no unsafe-inline/unsafe-eval for scripts, nothing loaded from other
      sites except the GitHub API for backups), exactly one inline script, no inline event handlers
      or javascript: URLs, no eval/new Function, and every file the app needs offline is precached.
 """
-import base64, hashlib, pathlib, re, sys
+import base64, hashlib, pathlib, re, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 INDEX, SW = ROOT / "index.html", ROOT / "sw.js"
@@ -55,6 +57,39 @@ def security_checks(html, js):
         fail("javascript: URLs are not allowed")
 
 
+VER_RE = re.compile(r"const VER='(\d+)\.(\d+)';")
+APP_FILES = ("index.html", "sw.js", "manifest.webmanifest")
+
+
+def normalize(text):
+    """App content without the parts the build itself writes (version, CSP hash, cache name)."""
+    text = VER_RE.sub("const VER='';", text)
+    text = re.sub(r"script-src 'sha256-[^']+'", "script-src ''", text)
+    return re.sub(r"const C='[^']*';", "const C='';", text)
+
+
+def committed(path):
+    r = subprocess.run(["git", "-C", str(ROOT), "show", f"HEAD:{path}"], capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def expected_version(html, sw):
+    m = VER_RE.search(html)
+    if not m or len(VER_RE.findall(html)) != 1:
+        fail("index.html must contain exactly one  const VER='X.Y';")
+    cur = (int(m.group(1)), int(m.group(2)))
+    head = {f: committed(f) for f in APP_FILES}
+    hm = VER_RE.search(head["index.html"] or "")
+    if not hm:
+        return cur   # no git history to compare with: keep what's there
+    hv = (int(hm.group(1)), int(hm.group(2)))
+    now = {"index.html": html, "sw.js": sw, "manifest.webmanifest": (ROOT / "manifest.webmanifest").read_text()}
+    changed = any(normalize(now[f]) != normalize(head[f] or "") for f in APP_FILES)
+    if not changed:
+        return hv
+    return cur if cur > hv else (hv[0], hv[1] + 1)
+
+
 def shell_files(sw):
     m = re.search(r"const SHELL=\[(.*?)\];", sw, re.S)
     if not m:
@@ -75,8 +110,10 @@ def shell_files(sw):
 def main():
     check = "--check" in sys.argv
     html, sw = INDEX.read_text(), SW.read_text()
-    h, js = script_hash(html)
-    new_html = re.sub(r"script-src 'sha256-[^']+'", f"script-src '{h}'", html)
+    v = expected_version(html, sw)
+    html_v = VER_RE.sub(f"const VER='{v[0]}.{v[1]}';", html)
+    h, js = script_hash(html_v)
+    new_html = re.sub(r"script-src 'sha256-[^']+'", f"script-src '{h}'", html_v)
     security_checks(new_html, js)
     files = shell_files(sw)
     digest = hashlib.sha256()
@@ -90,11 +127,11 @@ def main():
     if check:
         if changed:
             fail("out of date: " + ", ".join(changed) + " (run python3 tools/build.py)")
-        print("OK: CSP hash, cache version and security checks all pass")
+        print(f"OK: v{v[0]}.{v[1]}; CSP hash, cache version and security checks all pass")
         return
     INDEX.write_text(new_html)
     SW.write_text(new_sw)
-    print(("Updated " + ", ".join(changed)) if changed else "Already up to date", "| cache", version)
+    print(("Updated " + ", ".join(changed)) if changed else "Already up to date", f"| v{v[0]}.{v[1]} | cache", version)
 
 
 if __name__ == "__main__":
