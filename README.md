@@ -4,6 +4,19 @@ Offline workout tracker that runs as a single-file web app on your phone: https:
 
 Everything lives in the browser on your phone (IndexedDB), with optional automatic backup to a private GitHub repo.
 
+## Features
+
+- **Train:** start a day from your active plan or a quick workout. Log weight, reps and RIR per set; a rest timer starts after each set (tap the time to change it, ±15 s buttons). Add or replace exercises by typing a name.
+- **Suggestions:** for RIR exercises, each set's weight and reps come from your estimated strength (average of your last 4 sessions, working sets only, preferring a similar rep range) and the target rep range and RIR. You get one more rep than last time; at the top of the range the weight goes up and reps reset. Later sets drop a rep every two sets for fatigue.
+- **% of 1RM exercises:** sets written as `3*80%x5` in a plan, using your current 1RM.
+- **Warm-ups:** set 0–4 warm-up sets per exercise to get a ramp before your working sets; any set can be marked as a warm-up. Warm-ups never count toward suggestions or 1RM/PB.
+- **1RM and PB:** a set of 1 rep at 0 RIR counts as a tested 1RM; lifetime PB rises automatically.
+- **Plans:** days per week, number of weeks, per-day exercises with sets, rep range and RIR. Progress shows as a barbell bar on the Train page.
+- **History:** month calendar of training days, every workout listed, and per-exercise charts (max weight and volume per session).
+- **Exercises:** alphabetical list with a search box.
+- **Navigation:** swipe left/right between tabs; the phone's back gesture closes the open page.
+- **Backup:** automatic backup to a private GitHub repo (fine-grained token, Contents read/write on that repo only), plus manual export/import of a JSON file.
+
 ## Making changes
 
 1. Edit `index.html` (the whole app: HTML, CSS and JavaScript).
