@@ -14,7 +14,7 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 - **Plans:** days per week, number of weeks, per-day exercises with sets, rep range and RIR. Progress shows as a barbell bar on the Train page.
 - **History:** month calendar of training days, every workout listed, and per-exercise charts (max weight and volume per session).
 - **Exercises:** alphabetical list with a search box.
-- **Navigation:** swipe left/right between tabs; the phone's back gesture closes the open page.
+- **Navigation:** swipe left/right between tabs; the phone's back gesture closes the open page. The bottom bar is fixed and only the page above it scrolls; each tab opens at the top, and going back from an exercise returns you to the same place in the list.
 - **Backup:** automatic backup to a private GitHub repo (fine-grained token, Contents read/write on that repo only), plus manual export/import of a JSON file.
 
 ## Making changes

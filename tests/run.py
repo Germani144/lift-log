@@ -285,6 +285,22 @@ def bottom_bar_is_never_rebuilt(app):
 
 
 @test
+def only_the_content_scrolls(app):
+    """The bar is part of a fixed frame; only <main> scrolls, so changing tabs never moves the bar."""
+    for i in range(30):
+        app.js(f"put('exercises',{{name:'Ex {i:02d}',mode:'rir',inc:2,lo:8,hi:12,rir:2}})")
+    app.js("load().then(render)"); app.tab("Exercises")
+    nav = "(r=>[Math.round(r.bottom),innerHeight])(document.querySelector('nav').getBoundingClientRect())"
+    app.js("document.querySelector('main').scrollTop=1500")
+    eq(app.js("scrollY"), 0, "the window itself must never scroll")
+    b, h = app.js(nav); eq(b, h, "bar sits at the bottom of the screen")
+    app.click("[data-a=exOpen] >> nth=20"); eq(app.js("document.querySelector('main').scrollTop"), 0, "a page opens at the top")
+    app.click("[data-a=back]"); eq(app.js("document.querySelector('main').scrollTop"), 1500, "Back returns to the same place in the list")
+    app.tab("History"); eq(app.js("document.querySelector('main').scrollTop"), 0, "a tab opens at the top")
+    b, h = app.js(nav); eq(b, h, "bar still at the bottom after changing tabs")
+
+
+@test
 def swipe_changes_tabs(app):
     cdp = app.ctx.new_cdp_session(app.pg)
 

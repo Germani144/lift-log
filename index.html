@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bRmR3BPd1rKG8agt0A0iJ0JWBxUS8iIhnXSkNlbHuPY='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-prc/Oo62KodJaYnH0iTs59nKMGpjI1j92BIOrH7vzEE='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -18,9 +18,11 @@
 :root{--bg:#12161c;--fg:#eceae4;--m:#8e9aa8;--c:#1b212a;--c2:#262e3a;--bd:#2d3744;--ac:#e8372f;--on:#fff;--wr:#ff8a5c;--blu:#4a7bea;--blud:#1c2a47;--redd:#3a1d1f;--ok:#7fd1a0;--sh:#0008}
 @media(prefers-color-scheme:light){:root{--bg:#eceff3;--fg:#14181e;--m:#5d6a79;--c:#fff;--c2:#e6eaf0;--bd:#d6dce4;--ac:#d92b24;--blu:#2f60d6;--blud:#e3ebfd;--redd:#fbe3e1;--wr:#c8340b;--ok:#2f9e63;--sh:#0003}}
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%;touch-action:pan-y}
-body{background:var(--bg);color:var(--fg);font:400 16px/1.4 Bw,system-ui,-apple-system,"Segoe UI",sans-serif;padding-top:env(safe-area-inset-top);-webkit-tap-highlight-color:transparent}
-main{padding:14px 14px 170px;max-width:560px;margin:auto;touch-action:pan-y}
+html,body{margin:0;height:100%;overflow:hidden;touch-action:pan-y}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+body{background:var(--bg);color:var(--fg);font:400 16px/1.4 Bw,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent}
+#app{padding-top:env(safe-area-inset-top)}
+main{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px max(14px,calc(50% - 266px)) 110px;touch-action:pan-y}
 h2{margin:6px 0 14px;font:700 32px/1 BC,system-ui,sans-serif;letter-spacing:.2px}
 .hd h2{margin:0}
 main>.hd{margin-bottom:10px}
@@ -90,7 +92,7 @@ label input,label select,label textarea{margin-top:4px}
 .sg{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--bd);padding:12px 14px;font-weight:600;cursor:pointer;color:var(--fg);min-height:48px}
 .sg:last-child{border-bottom:0}.sg .m{font-weight:400;flex:none}.sg.new{color:var(--blu)}
 .b.exsw{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;background:var(--c);font-size:17px}.b.exsw .m{flex:none;font-weight:500}
-nav{position:fixed;left:0;right:0;bottom:0;z-index:6;will-change:transform;transform:translateZ(0);display:flex;background:var(--c);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+nav{flex:none;position:relative;z-index:6;display:flex;background:var(--c);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;padding:9px 0 8px;border:0;background:none;font-size:12px;font-weight:500;cursor:pointer;color:var(--m);display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
 nav button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{color:var(--fg);font-weight:600}
@@ -130,6 +132,7 @@ const $=(s,e=document)=>e.querySelector(s), app=$('#app');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const bb=(n,done,cur,label)=>`<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({length:n},(_,i)=>`<i${i<done?' class=d':cur&&i==done?' class=n':''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NI={train:'<svg viewBox="0 0 24 24"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',hist:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',tpl:'<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',ex:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>'};
+const scTo=(x,y)=>{const m=$('main');if(m)m.scrollTop=y},scY=()=>$('main')?.scrollTop||0;   // the page scrolls inside <main>, not the window
 const fmt=x=>x===''||x==null||isNaN(x)?'':+(+x).toFixed(2);
 const age=t=>{const d=Math.floor((Date.now()-t)/864e5);return d<1?'today':d<60?d+'d ago':Math.round(d/30.4)+'mo ago'};
 const dstr=t=>new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
@@ -419,13 +422,16 @@ try{history.replaceState({ll:0},'')}catch{}
 
 // The bottom bar is built once and kept; only <main> is redrawn. Rebuilding the bar on every
 // render made it flicker on tab changes (the phone repainted it after long pages like History).
+let RV='',LY=0;
 function render(){
  const v=S.view?.t,body=v=='exd'?rExd():v=='tple'?rTple():{train:rTrain,hist:rHist,tpl:rTpl,ex:rEx}[S.tab]();
  let m=$('main',app),nav=$('nav',app);
  if(!m||!nav){app.innerHTML=`<main></main><nav>${[['train','Train'],['hist','History'],['tpl','Plans'],['ex','Exercises']].map(([k,l])=>`<button data-a=tab data-i=${k}>${NI[k]}${l}</button>`).join('')}</nav>`;m=$('main',app);nav=$('nav',app)}
  m.removeAttribute('style');m.className='';
  if(SL){void m.offsetWidth;m.className='sl'+(SL>0?'r':'l')}   // restart the slide-in animation
+ const vk=S.view?S.view.t:'',open=vk&&!RV,close=!vk&&RV;if(open)LY=m.scrollTop;
  m.innerHTML=body;
+ if(open)m.scrollTop=0;else if(close)m.scrollTop=LY;RV=vk;   // pages open at the top; Back returns to where you were in the list
  nav.querySelectorAll('button').forEach(b=>{b.classList.toggle('on',b.dataset.i==S.tab);b.classList.remove('nx')});
  SL=0;navSync()}
 
@@ -470,13 +476,13 @@ const back=()=>{S.view=null;E=null;render()};
 const A={
  backup:()=>exportData(),
  restore:()=>$('#imp').click(),
- tab:async(s,d)=>{PICK=null;S.tab=d.i;S.view=null;E=null;await load();render()},
+ tab:async(s,d)=>{PICK=null;S.tab=d.i;S.view=null;E=null;await load();render();scTo(0,0)},
  back,
  start:(s,d)=>{if(W&&!confirm(`You have a workout in progress (${W.name}). Start a new one instead? Sets you already logged stay in History.`))return;start(+d.i||null,+d.d||0)},
- toLanding:()=>{LAND=true;render();scrollTo(0,0)},
- resume:()=>{LAND=false;render();scrollTo(0,0)},
+ toLanding:()=>{LAND=true;render();scTo(0,0)},
+ resume:()=>{LAND=false;render();scTo(0,0)},
  finish:async()=>{if(confirm('Finish workout?')){W=null;LAND=false;saveW();await load();render()}},
- pickAdd:()=>{PICK={t:'add',y:scrollY};PQ='';PALL=false;render();scrollTo(0,0);$('#pq')?.focus()},
+ pickAdd:()=>{PICK={t:'add',y:scY()};PQ='';PALL=false;render();scTo(0,0);$('#pq')?.focus()},
  pickAll:()=>{PALL=true;$('#plist').innerHTML=pickBox()},
  pickNew:async()=>{const id=await newEx($('#pq').value);if(id)A.pickGo(null,{x:id})},
  tplSwap:(s,d)=>{TR={k:+d.k,j:+d.i,q:''};render();const q=$('[data-tr]');if(q){q.focus();q.scrollIntoView({block:'center'})}},
@@ -485,15 +491,15 @@ const A={
  tplSetNew:async()=>{const id=await newEx($('[data-tr]').value);if(id)A.tplSet(null,{x:id})},
  tplPick:(s,d)=>{E.days[+d.k].items.push({exId:+d.x,n:3,text:''});TQ={k:+d.k,q:''};render();const q=$(`[data-tq="${d.k}"]`);if(q){q.focus();q.scrollIntoView({block:'center'})}},
  tplPickNew:async(s,d)=>{const id=await newEx($(`[data-tq="${d.k}"]`).value);if(id)A.tplPick(null,{k:d.k,x:id})},
- repl:(s,d)=>{PICK={t:'rep',i:+d.i,y:scrollY};PQ='';PALL=false;render();scrollTo(0,0);$('#pq')?.focus()},
- pickCancel:()=>{const y=PICK.y;PICK=null;render();scrollTo(0,y)},
+ repl:(s,d)=>{PICK={t:'rep',i:+d.i,y:scY()};PQ='';PALL=false;render();scTo(0,0);$('#pq')?.focus()},
+ pickCancel:()=>{const y=PICK.y;PICK=null;render();scTo(0,y)},
  pickGo:async(s,d)=>{const exId=+d.x,P=PICK;
-  if(P.t=='add'){await addItem({exId,n:3});PICK=null;saveW();render();scrollTo(0,document.body.scrollHeight);return}
+  if(P.t=='add'){await addItem({exId,n:3});PICK=null;saveW();render();scTo(0,1e9);return}
   const it=W.items[P.i],done=it.rows.filter(x=>x.done);
   if(done.length&&!confirm(`Replace ${EX(it.exId)?.name||'this exercise'} with ${EX(exId).name}? Its ${done.length} logged set${done.length>1?'s':''} in this workout will be deleted.`))return;
   for(const x of done)if(x.id)await del('sets',x.id);
   await addItem({exId,n:it.rows.filter(x=>!x.wu).length||3});W.items[P.i]=W.items.pop();   // swap the new item into the old one's place
-  PICK=null;saveW();render();scrollTo(0,P.y)},
+  PICK=null;saveW();render();scTo(0,P.y)},
  rdec:()=>setRest(W.rest-15),
  rinc:()=>setRest(W.rest+15),
  rstop:()=>{W.restEnd=0;saveW();tickRest()},
