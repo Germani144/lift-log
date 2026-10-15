@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Zk62TUaQm1d0n/h41J9dVD0QGHD0XTnhdTe3pGAGb7Y='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aC8rZ9RD5+CRUAeaT+pQzoce2Z7nmngwm89Jv7jRjBQ='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -345,9 +345,20 @@ function rTple(){const dpw=[1,2,3,4,5,6,7].map(n=>`<option ${n==E.days.length?'s
   `<button class=b data-a=tplAdd data-i=${k}>+ Exercise</button></div>`).join('')+
  `<div class=row><button class="b p" data-a=tplSave>Save</button>${E.id?'<button class=b data-a=tplDel>Delete</button>':''}</div>`}
 
+/* ---------- phone back gesture / back button: close the open page instead of leaving the app ---------- */
+const depth=()=>(S.view||PICK||(W&&!LAND&&S.tab=='train'))?1:0;
+let popping=false;
+function navSync(){const d=depth(),cur=history.state?.ll||0;
+ if(d&&!cur)history.pushState({ll:1},'');
+ else if(!d&&cur){popping=true;history.back()}}
+addEventListener('popstate',()=>{if(popping){popping=false;return}
+ if(!depth())return;
+ if(PICK)A.pickCancel();else if(S.view)A.back();else A.toLanding()});
+try{history.replaceState({ll:0},'')}catch{}
+
 function render(){
  const v=S.view?.t,body=v=='exd'?rExd():v=='tple'?rTple():{train:rTrain,hist:rHist,tpl:rTpl,ex:rEx}[S.tab]();
- app.innerHTML=`<main${SL?` class=sl${SL>0?'r':'l'}`:''}>${body}</main><nav>${[['train','Train'],['hist','History'],['tpl','Plans'],['ex','Exercises']].map(([k,l])=>`<button class="${S.tab==k?'on':''}" data-a=tab data-i=${k}>${NI[k]}${l}</button>`).join('')}</nav>`;SL=0}
+ app.innerHTML=`<main${SL?` class=sl${SL>0?'r':'l'}`:''}>${body}</main><nav>${[['train','Train'],['hist','History'],['tpl','Plans'],['ex','Exercises']].map(([k,l])=>`<button class="${S.tab==k?'on':''}" data-a=tab data-i=${k}>${NI[k]}${l}</button>`).join('')}</nav>`;SL=0;navSync()}
 
 /* ---------- events ---------- */
 const setPath=(o,p,v)=>{const k=p.split('.'),l=k.pop();k.forEach(x=>o=o[x]);o[l]=v};
