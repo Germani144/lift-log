@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-QwtIyFf0p/lpwdyU9CtyCajTjjtE1nWvjzU+Rh+kP8I='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Zk62TUaQm1d0n/h41J9dVD0QGHD0XTnhdTe3pGAGb7Y='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -272,10 +272,10 @@ function rEx(){return`<div class=hd><h2>Exercises</h2><div class=key><span><i st
 function sessions(sets){const g={};sets.forEach(s=>(g[s.sess]??=[]).push(s));
  return Object.keys(g).map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),es=ss.filter(s=>s.rir!=null&&!s.test).map(s=>e1(s.w,s.r,s.rir));
   return{k:+k,t:ss[0].t,ss,vol:ss.reduce((a,s)=>a+s.r,0),top:ss.reduce((a,b)=>b.w>a.w?b:a),e:es.length?Math.max(...es):null}}).sort((a,b)=>b.k-a.k)}
-function chart(l,v,t){if(v.length<2)return'';const mx=Math.max(...v),mn=0,R=mx-mn||1,L=34,Rr=292,T=8,B=100,
+function chart(l,v,t,z){if(v.length<2)return'';const mx=Math.max(...v),mn=z?0:Math.min(...v),R=mx-mn||1,L=34,Rr=292,T=8,B=100,
  X=i=>(L+i/(v.length-1)*(Rr-L)).toFixed(1),Y=y=>(B-(y-mn)/R*(B-T)).toFixed(1),
  pts=v.map((y,i)=>X(i)+','+Y(y)).join(' '),d=x=>new Date(x).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'2-digit'});
- return`<div class=m style="margin-top:12px">${l}</div><svg viewBox="0 0 300 124" width="100%" role=img aria-label="${l}: from ${fmt(v[0])} to ${fmt(v[v.length-1])}"><g fill="var(--m)" font-size="10" font-family="Bw,system-ui,sans-serif"><text x="${L-5}" y="${T+3}" text-anchor="end">${fmt(mx)}</text><text x="${L-5}" y="${B+3}" text-anchor="end">0</text><text x="${L}" y="118">${d(t[0])}</text><text x="${Rr}" y="118" text-anchor="end">${d(t[t.length-1])}</text></g>
+ return`<div class=m style="margin-top:12px">${l}</div><svg viewBox="0 0 300 124" width="100%" role=img aria-label="${l}: from ${fmt(v[0])} to ${fmt(v[v.length-1])}"><g fill="var(--m)" font-size="10" font-family="Bw,system-ui,sans-serif"><text x="${L-5}" y="${T+3}" text-anchor="end">${fmt(mx)}</text><text x="${L-5}" y="${B+3}" text-anchor="end">${fmt(mn)}</text><text x="${L}" y="118">${d(t[0])}</text><text x="${Rr}" y="118" text-anchor="end">${d(t[t.length-1])}</text></g>
  <path d="M${L} ${T}V${B}H${Rr}" fill="none" stroke="var(--m)" stroke-width="1" opacity=".6"/><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linejoin="round"/></svg>`}
 
 function rExd(){const e=E;if(e.cur===undefined)e.cur=e.id?S.pr[e.id]?.w??'':'';const n=k=>`type=number step=any data-n data-b=${k} value="${e[k]??''}"`;
@@ -293,8 +293,7 @@ function rExd(){const e=E;if(e.cur===undefined)e.cur=e.id?S.pr[e.id]?.w??'':'';c
  `<div class=row><input id=prw type=number step=any inputmode=decimal placeholder="Tested 1RM"><input id=prd type=date value="${new Date().toISOString().slice(0,10)}"><button class=b data-a=prAdd>Add PR</button></div></div>`;
  const ses=sessions(S.hist);
  h+=`<div class=card><b>History</b>`+(ses.length?
-  `<div class=m>${ses.length} sessions · best e1RM ${Math.round(Math.max(0,...ses.map(x=>x.e||0))*10)/10||'–'}</div>`+
-  chart('Volume per session (reps)',ses.map(x=>x.vol).reverse(),ses.map(x=>x.t).reverse())+
+  chart('Max weight per session (kg)',ses.map(x=>x.top.w).reverse(),ses.map(x=>x.t).reverse())+chart('Volume per session (reps)',ses.map(x=>x.vol).reverse(),ses.map(x=>x.t).reverse(),1)+
   ses.map(x=>`<div class=card style="margin:8px 0"><div class=hd><b>${dstr(x.t)}</b><span class=m>volume ${x.vol} reps</span></div><div class=m>Top set ${wt(x.top.w)}×${x.top.r}${x.e?` · best e1RM ${fmt(x.e)}`:''}</div>`+
    x.ss.map(s=>`<div class=hl><span>${wt(s.w)} × ${s.r}${s.rir!=null?` @ ${fmt(s.rir)} RIR`:''}${s.test?' ★test':''}</span><button data-a=sdel data-i=${s.id}>×</button></div>`).join('')+`</div>`).join('')
   :'<p class=m>No sets logged.</p>')+`</div>`;
