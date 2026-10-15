@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3/z4rOQCGT2kPMVblMVc4fNKAbCIU2Nmd651Pv97l44='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Hoekb+BEQLIEtuPv+TPCl8yd8E9F8MOQLTdbDt6UBiE='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <link rel="manifest" href="manifest.webmanifest">
@@ -433,13 +433,13 @@ const ghCfg=()=>{try{return JSON.parse(lg('gh')||'null')}catch{return null}};
 const ghUrl=g=>`https://api.github.com/repos/${g.repo}/contents/liftlog-backup.json`;
 const ghH=(g,a='application/vnd.github+json')=>({Authorization:'Bearer '+g.token,Accept:a});
 function touch(){ls('dirty','1');clearTimeout(bt);bt=setTimeout(autoBackup,15000)}
-async function ghPush(g){let sha;const r0=await fetch(ghUrl(g),{headers:ghH(g)});
+async function ghPush(g){let sha;const r0=await fetch(ghUrl(g),{headers:ghH(g),cache:'no-store'});
  if(r0.ok)sha=(await r0.json()).sha;else if(r0.status!=404)throw new Error('GitHub error '+r0.status);
  const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await all(n);
- const r=await fetch(ghUrl(g),{method:'PUT',headers:ghH(g),body:JSON.stringify({message:'Lift Log backup',content:btoa(unescape(encodeURIComponent(JSON.stringify(d)))),sha})});
- if(!r.ok)throw new Error('GitHub error '+r.status);
+ const r=await fetch(ghUrl(g),{method:'PUT',cache:'no-store',headers:ghH(g),body:JSON.stringify({message:'Lift Log backup',content:btoa(unescape(encodeURIComponent(JSON.stringify(d)))),sha})});
+ if(!r.ok)throw new Error('GitHub error '+r.status+(r.status==422?' (stale file version, try again)':''));
  ls('lb',Date.now());ls('dirty','0');ls('gherr','')}
-async function ghPull(g){const r=await fetch(ghUrl(g),{headers:ghH(g,'application/vnd.github.raw+json')});
+async function ghPull(g){const r=await fetch(ghUrl(g),{headers:ghH(g,'application/vnd.github.raw+json'),cache:'no-store'});
  if(r.status==404)return null;if(!r.ok)throw new Error('GitHub error '+r.status);return JSON.parse(await r.text())}
 async function autoBackup(){const g=ghCfg();if(!g||!navigator.onLine||(!S.ex.length&&!S.sets.length))return;
  try{await ghPush(g)}catch(e){ls('gherr','Last automatic backup failed: '+e.message)}
