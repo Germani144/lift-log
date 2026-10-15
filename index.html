@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-cJWIltSZTg6X+LaDPHWRf9NwNSYpNKtnIiuwss/PpYo='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RuK8Yzf66fpTUFineNdgrlF8kHlaSnmnNLtSfNMPmoA='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#14171a">
 <link rel="manifest" href="manifest.webmanifest">
@@ -299,6 +299,11 @@ app.addEventListener('input',e=>{const t=e.target,s=t.closest('.set');
  else if(t.dataset.b&&E)setPath(E,t.dataset.b,t.dataset.n!=null?(t.value===''?'':+t.value):t.value)});
 app.addEventListener('change',e=>{if(e.target.id=='imp')importData(e.target.files[0]);else if(e.target.dataset.dpw!=null)resizeDays(+e.target.value);else if(e.target.dataset.rr!=null)render()});
 app.addEventListener('submit',e=>{if(e.target.id=='ghf'){e.preventDefault();A.ghSave()}});
+let sx,sy,sok;
+app.addEventListener('touchstart',e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY;sok=e.touches.length==1&&!S.view&&!e.target.closest('input,textarea,select,nav,[data-noswipe]')},{passive:true});
+app.addEventListener('touchend',e=>{if(!sok)return;sok=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;
+ if(Math.abs(dx)<80||Math.abs(dx)<2*Math.abs(dy))return;
+ const T=['train','hist','tpl','ex'],i=T.indexOf(S.tab)+(dx<0?1:-1);if(i>=0&&i<T.length)A.tab(null,{i:T[i]})},{passive:true});
 app.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b&&!b.disabled)A[b.dataset.a]?.(b.closest('.set'),b.dataset)});
 
 async function loadEx(id){S.prl=(await all('pr_history','ex',id)).sort((a,b)=>b.t-a.t);
