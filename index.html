@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+3YBJA+rpdkmH82+DDfltnjK7k/ktSF3dThNiamGep8='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6In5+0Sl51Ez2OqfbnSmzG8IHze6wqLK7PhmgIdC3WQ='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -120,14 +120,12 @@ code{background:var(--bg);padding:1px 5px;border-radius:5px}
 .inf b{color:var(--fg);font-weight:600}
 .eset.wu input{background:transparent;box-shadow:inset 0 0 0 1px var(--bd)}.eset.wu .inf>span:first-child{color:var(--blu);font-weight:600}
 #exq{margin:0 0 6px}
-.b.big.exr{display:flex;align-items:center;gap:12px;position:relative;padding-left:22px}
-.exr:before{content:"";position:absolute;left:9px;top:12px;bottom:12px;width:4px;border-radius:2px;background:var(--ac)}
-.exr.pct:before{background:var(--blu)}
+.b.big.exr{display:flex;align-items:center;gap:12px}
 .exr .l{flex:1;min-width:0}
 .exr .r{text-align:right;flex:none}
 .exr .r b{display:block;font:700 28px/1 BC,system-ui,sans-serif}.exr .r b i{font:600 14px Bw,system-ui,sans-serif;font-style:normal;color:var(--m)}
 .exr .r small{display:block;font-size:12px;color:var(--m);font-weight:400}
-.key{font-size:12px;color:var(--m);display:flex;gap:12px;align-items:center}.key i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+
 @keyframes slr{from{transform:translateX(40px);opacity:.3}to{transform:none;opacity:1}}@keyframes sll{from{transform:translateX(-40px);opacity:.3}to{transform:none;opacity:1}}
 main.slr{animation:slr .2s ease-out}main.sll{animation:sll .2s ease-out}
 nav button.nx{color:var(--fg);background:var(--c2)}
@@ -151,7 +149,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const bb=(n,done,cur,label)=>`<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({length:n},(_,i)=>`<i${i<done?' class=d':cur&&i==done?' class=n':''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NI={train:'<svg viewBox="0 0 24 24"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',hist:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',tpl:'<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',ex:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>'};
 const scTo=(x,y)=>{const m=$('main');if(m)m.scrollTop=y},scY=()=>$('main')?.scrollTop||0;   // the page scrolls inside <main>, not the window
-const VER='2.0';   // app version, bumped automatically by tools/build.py on every change
+const VER='2.1';   // app version, bumped automatically by tools/build.py on every change
 const fmt=x=>x===''||x==null||isNaN(x)?'':+(+x).toFixed(2);
 const age=t=>{const d=Math.floor((Date.now()-t)/864e5);return d<1?'today':d<60?d+'d ago':Math.round(d/30.4)+'mo ago'};
 const dstr=t=>new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
@@ -193,6 +191,7 @@ async function load(){
 /* ---------- plan slots: each one is RIR (sets, rep range, target RIR) or % of 1RM (lines of sets x reps @ % with a target RPE) ---------- */
 // Old plans stored % sets as text like "3*80%x5"; turn those into lines once.
 function linesFromText(t){const out=[];for(const l of String(t||'').split('\n')){const m=l.trim().match(/^(?:(\d+)\s*[*×]\s*)?(\d+(?:\.\d+)?)%\s*x\s*(\d+)$/i);if(m)out.push({n:+(m[1]||1),p:+m[2],r:+m[3]})}return out}
+const rememberMode=async(ex,m)=>{if(ex&&ex.mode!=m){ex.mode=m;await put('exercises',ex)}};   // new plan slots and quick adds start in the mode you used last
 const newLine=()=>({n:3,r:3,p:75});
 // RIR slots: one target RIR per week of the plan.
 const rirWeeks=(it,weeks,ex)=>{const a=Array.isArray(it.rirW)?it.rirW.slice(0,weeks):[],d=a.length?a[a.length-1]:(it.rir??ex?.rir??2);while(a.length<weeks)a.push(d);return a};
@@ -362,7 +361,7 @@ function exMatches(q,skip){const u={};for(const x of S.sets)u[x.exId]=(u[x.exId]
 function exSugg(q,skip,go,mk){const l=exMatches(q,skip),t=q.trim();
  if(!t)return l.length?`<div class=chips>${l.map(e=>`<button class=chip ${go(e)}>${esc(e.name)}</button>`).join('')}</div>`:'';
  const exact=S.ex.some(e=>e.name.toLowerCase()==t.toLowerCase());
- return`<div class=sugg>${l.map(e=>`<button class=sg ${go(e)}><span>${esc(e.name)}</span><span class=m>${e.mode=='pct'?'% of 1RM':`RIR · ${e.lo}–${e.hi}`}</span></button>`).join('')}${exact?'':`<button class="sg new" ${mk}>＋ New exercise “${esc(t.slice(0,80))}”</button>`}</div>`}
+ return`<div class=sugg>${l.map(e=>`<button class=sg ${go(e)}><span>${esc(e.name)}</span><span class=m>${e.inc>0?`${e.lo}–${e.hi} reps`:'bodyweight'}</span></button>`).join('')}${exact?'':`<button class="sg new" ${mk}>＋ New exercise “${esc(t.slice(0,80))}”</button>`}</div>`}
 const pickBox=()=>{const skip=PICK.t=='rep'?W.items[PICK.i]?.exId:null;
  return exSugg(PQ,skip,e=>`data-a=pickGo data-x=${e.id}`,'data-a=pickNew')+(PQ.trim()?'':PALL?`<div style="margin-top:8px">${pickList()}</div>`:`<button class=lk data-a=pickAll>Show all exercises</button>`)};
 const trBox=()=>{const it=E.days[TR.k].items[TR.j];return exSugg(TR.q,it.exId,e=>`data-a=tplSet data-x=${e.id}`,'data-a=tplSetNew')};
@@ -371,7 +370,7 @@ const newEx=async name=>{name=name.trim().slice(0,80);if(!name)return null;const
  await load();toast(`Created ${name}: RIR, 8–12 reps, 2 kg steps. Change it in Exercises.`);return id};
 function pickList(){const q=PQ.trim().toLowerCase(),skip=PICK.t=='rep'?W.items[PICK.i]?.exId:null,
  l=sortedEx().filter(e=>e.id!=skip&&e.name.toLowerCase().includes(q));
- return l.map(e=>`<button class="b big" data-a=pickGo data-x=${e.id}>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':`RIR · ${e.lo}–${e.hi} reps`}</small></button>`).join('')||'<p class=m>No exercise matches.</p>'}
+ return l.map(e=>`<button class="b big" data-a=pickGo data-x=${e.id}>${esc(e.name)}<small>${e.inc>0?`${e.lo}–${e.hi} reps`:'bodyweight'}</small></button>`).join('')||'<p class=m>No exercise matches.</p>'}
 function rPick(){const old=PICK.t=='rep'?EX(W.items[PICK.i]?.exId):null;
  return`<div class=hd><h2>${PICK.t=='rep'?'Replace '+esc(old?.name||'exercise'):'Add exercise'}</h2><button class=b data-a=pickCancel>Cancel</button></div><input id=pq placeholder="Type an exercise" value="${esc(PQ)}" autocomplete=off enterkeyhint=done><div id=plist>${pickBox()}</div>`}
 function rTrain(){
@@ -385,9 +384,9 @@ function rTrain(){
 
 let EQ='';   // Exercises tab search text
 const exHit=n=>{n=n.toLowerCase();return EQ.toLowerCase().split(/\s+/).filter(Boolean).every(w=>n.includes(w))};
-function rEx(){return`<div class=hd><h2>Exercises</h2><div class=key><span><i style="background:var(--ac)"></i>RIR</span><span><i style="background:var(--blu)"></i>% of 1RM</span></div></div>`+
+function rEx(){return`<h2>Exercises</h2>`+
  (S.ex.length?`<input id=exq type=search placeholder="Search exercises" value="${esc(EQ)}" autocomplete=off enterkeyhint=search>`:'')+(!S.ex.length&&!S.sets.length&&!ghCfg()?`<div class=card><b>No data here</b><div class=m>If you had a backup, restore it first: enter your token in Automatic backup below and tap Turn on. Don't add anything before restoring.</div></div>`:'')+sortedEx().map(e=>{const p=S.pr[e.id];
- return`<button class="b big exr${e.mode=='pct'?' pct':''}" data-a=exOpen data-i=${e.id} data-q="${esc(e.name.toLowerCase())}"${exHit(e.name)?'':' hidden'}><span class=l>${esc(e.name)}<small>${e.mode=='pct'?'% of 1RM':'RIR'} · ${e.inc>0?'increment '+e.inc:'bodyweight'}</small></span>${p?`<span class=r><b>${fmt(p.w)}<i> kg</i></b><small>1RM ${age(p.t)}${e.pb?' · PB '+fmt(e.pb):''}</small></span>`:e.pb?`<span class=r><small>PB ${fmt(e.pb)}</small></span>`:e.mode=='pct'?'<span class=r><small>No 1RM</small></span>':''}</button>`}).join('')+`<p class=m id=exnone${!S.ex.length||S.ex.some(e=>exHit(e.name))?' hidden':''}>No exercise matches “${esc(EQ)}”.</p><button class="b p" data-a=exNew>New exercise</button>
+ return`<button class="b big exr" data-a=exOpen data-i=${e.id} data-q="${esc(e.name.toLowerCase())}"${exHit(e.name)?'':' hidden'}><span class=l>${esc(e.name)}<small>${e.inc>0?'increment '+e.inc:'bodyweight'}</small></span>${p?`<span class=r><b>${fmt(p.w)}<i> kg</i></b><small>1RM ${age(p.t)}${e.pb?' · PB '+fmt(e.pb):''}</small></span>`:e.pb?`<span class=r><small>PB ${fmt(e.pb)}</small></span>`:e.mode=='pct'?'<span class=r><small>No 1RM</small></span>':''}</button>`}).join('')+`<p class=m id=exnone${!S.ex.length||S.ex.some(e=>exHit(e.name))?' hidden':''}>No exercise matches “${esc(EQ)}”.</p><button class="b p" data-a=exNew>New exercise</button>
  ${ghCard()}
  <div class=card><b>Manual backup</b><div class=m>${lastBackup()?'Last backup '+age(lastBackup()):'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
  <div class=row><button class=b data-a=backup>Export</button><button class=b data-a=restore>Import</button></div><input type=file id=imp accept=".json,application/json" hidden></div>
@@ -405,12 +404,11 @@ function chart(l,v,t,z){if(v.length<2)return'';const mx=Math.max(...v),mn=z?0:Ma
 function rExd(){const e=E;if(e.cur===undefined)e.cur=e.id?S.pr[e.id]?.w??'':'';const n=k=>`type=number step=any data-n data-b=${k} value="${e[k]??''}"`;
  let h=`<button class=b data-a=back>‹ Back</button><div class=card>
  <label>Name<input data-b=name value="${esc(e.name)}"></label>
- <label>Default tracking (plans and workouts can switch)<select data-b=mode data-rr><option value=rir ${e.mode=='rir'?'selected':''}>RIR + weight + reps (auto-suggest)</option><option value=pct ${e.mode=='pct'?'selected':''}>% of tested 1RM × reps</option></select></label>
  <label>Weight increment (0 = bodyweight)<input ${n('inc')}></label>
  <label>Warm-up sets added before working sets (0–4)<input ${n('wu')} min=0 max=4 placeholder=0></label>
  <div class=row><label>Current 1RM (kg)<input ${n('cur')}></label><label>Lifetime PB (kg)<input ${n('pb')}></label></div>
  <div class=m>Current 1RM sets your % weights. Lifetime PB is your best ever, and it rises on its own when you beat it.</div>`+
- (e.mode=='rir'?`<div class=row><label>Reps min<input ${n('lo')}></label><label>Reps max<input ${n('hi')}></label><label>Target RIR<input ${n('rir')}></label></div>`:'')+
+ `<div class=m style="margin-top:10px">Quick workouts (plans set their own)</div><div class=row><label>Reps min<input ${n('lo')}></label><label>Reps max<input ${n('hi')}></label><label>Target RIR<input ${n('rir')}></label></div>`+
  `<div class=row><button class="b p" data-a=exSave>Save</button>${e.id?'<button class=b data-a=exDel>Delete</button>':''}</div></div>`;
  if(!e.id)return h;
  h+=`<div class=card><b>Tested 1RM history</b><div class=m>Latest entry is your current 1RM.</div>`+
@@ -584,7 +582,7 @@ const A={
  pickAdd:()=>{PICK={t:'add',y:scY()};PQ='';PALL=false;render();scTo(0,0);$('#pq')?.focus()},
  pickAll:()=>{PALL=true;$('#plist').innerHTML=pickBox()},
  pickNew:async()=>{const id=await newEx($('#pq').value);if(id)A.pickGo(null,{x:id})},
- tplMode:(s,d)=>{const it=E.days[+d.k].items[+d.i],x=EX(it.exId);it.mode=d.m;if(d.m=='pct'&&!it.lines?.length)it.lines=[newLine()];
+ tplMode:(s,d)=>{const it=E.days[+d.k].items[+d.i],x=EX(it.exId);it.mode=d.m;rememberMode(x,d.m);if(d.m=='pct'&&!it.lines?.length)it.lines=[newLine()];
   if(d.m=='rir'){it.n??=3;it.lo??=x?.lo??8;it.hi??=x?.hi??12}render()},
  tplAddLine:(s,d)=>{const it=E.days[+d.k].items[+d.i],l=it.lines[it.lines.length-1];it.lines.push(l?{...l}:newLine());render()},
  tplRmLine:(s,d)=>{const it=E.days[+d.k].items[+d.i];it.lines.splice(+d.l,1);if(!it.lines.length)it.lines.push(newLine());render()},
@@ -643,7 +641,7 @@ const A={
   render()},
  mode:async(s,d)=>{const it=W.items[+d.i],ex=EX(it.exId);if(it.mode==d.m)return;
   if(d.m=='pct'&&!(it.ref>0)){const ref=await refFor(ex);if(!ref)return toast(`No 1RM for ${ex.name} yet. Add a tested 1RM in Exercises, or log a few RIR sets first.`);it.ref=ref.w;it.refEst=ref.est}
-  it.mode=d.m;saveW();render()},
+  it.mode=d.m;saveW();render();rememberMode(ex,d.m)},
  wu:async s=>{const r=W.items[s.dataset.i].rows[s.dataset.j];r.wu=!r.wu;if(!r.wu)delete r.wu;
   if(r.done&&r.id){const x=await rq(st('sets').get(r.id));if(x){if(r.wu){x.wu=true;x.test=false}else{delete x.wu;x.test=isTest(x)}await put('sets',x)}}
   saveW();render()},
@@ -651,7 +649,7 @@ const A={
  exNew:()=>{E={name:'',mode:'rir',inc:2,lo:8,hi:12,rir:2};S.prl=[];S.hist=[];S.view={t:'exd'};render()},
  exOpen:async(s,d)=>{E=structuredClone(EX(+d.i));S.view={t:'exd'};await loadEx(E.id)},
  exSave:async()=>{if(!E.name.trim())return toast('Name required');E.inc=+E.inc||0;if(E.inc<0)return toast('Increment can\'t be negative');
-  if(E.mode=='rir'){E.lo||=8;E.hi||=Math.max(E.lo,12);E.rir??=2;if(E.hi<E.lo)return toast('Reps max must be at least reps min')}
+  E.mode=E.mode=='pct'?'pct':'rir';E.lo||=8;E.hi||=Math.max(E.lo,12);E.rir??=2;if(E.hi<E.lo)return toast('Reps max must be at least reps min');
   E.wu=Math.min(4,Math.max(0,Math.round(+E.wu||0)));if(!E.wu)delete E.wu;
   const cur=+E.cur||0;delete E.cur;
   if(E.pb===''||E.pb==null||!(+E.pb>0))delete E.pb;else E.pb=+E.pb;

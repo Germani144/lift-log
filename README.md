@@ -8,7 +8,7 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 
 - **Train:** start a day from your active plan or a quick workout. Log weight, reps and RIR per set (leave the weight empty or 0 for a bodyweight set; it shows as BW once logged). Tap the light checkmark to log a set; it turns into a filled red check; a rest timer starts after each set (tap the time to change it, ±15 s buttons). Add or replace exercises by typing a name.
 - **Suggestions:** for RIR exercises, each set's weight and reps come from your estimated strength (average of your last 4 sessions, working sets only, preferring a similar rep range) and the target rep range and RIR. You get one more rep than last time; at the top of the range the weight goes up and reps reset. Later sets drop a rep every two sets for fatigue. If your last session of an exercise was all bodyweight, the suggestion stays at bodyweight and adds a rep.
-- **RIR or % of 1RM, per plan slot and per workout:** every exercise in a plan has a **RIR | % 1RM** switch, and so does every exercise card in a workout. The exercise's own tracking setting is just the default.
+- **RIR or % of 1RM, per plan slot and per workout:** every exercise in a plan has a **RIR | % 1RM** switch, and so does every exercise card in a workout. Exercises themselves have no tracking type: a new plan slot or quick-workout exercise starts in whichever mode you used last for it.
   - **RIR slots:** sets, this plan's rep range, and a target RIR for **each week** of the plan (W1, W2, …). Each workout uses the target for the current plan week and suggests weight and reps as above.
   - **% slots:** lines of sets × reps @ % of 1RM (number fields, e.g. 3 × 2 @ 80%). In the workout you see % of 1RM, reps and RPE, with the kg to load under each set; you fill in the RPE you felt.
   - **One history:** every set is stored as kg, reps and RIR (RPE = 10 − RIR), so switching view is lossless and both views feed the same history. % uses your tested 1RM, or your estimated 1RM if you haven't tested one.
@@ -20,7 +20,7 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 - **1RM and PB:** a set of 1 rep at 0 RIR counts as a tested 1RM; lifetime PB rises automatically.
 - **Plans:** days per week, number of weeks, and per-day exercises planned by RIR or % of 1RM (see above). Old text-style % plans (`3*80%x5`) are converted automatically. Progress shows as a barbell bar on the Train page.
 - **History:** month calendar of training days, every workout listed, and per-exercise charts (max weight and volume per session). Tap **Edit workout** on any past workout to change its date or name, edit any set (weight, reps, RIR, warm-up), remove sets or exercises, or add sets and exercises. The workout in progress is edited from the Train tab instead.
-- **Exercises:** alphabetical list with a search box.
+- **Exercises:** alphabetical list with a search box. Each exercise has its weight increment, warm-up sets, current 1RM and lifetime PB, plus the rep range and target RIR used for quick workouts (plans set their own).
 - **Navigation:** swipe left/right between tabs; the phone's back gesture closes the open page. The bottom bar is fixed and only the page above it scrolls; each tab opens at the top, and going back from an exercise returns you to the same place in the list.
 - **Backup:** automatic backup to a private GitHub repo (fine-grained token, Contents read/write on that repo only), plus manual export/import of a JSON file.
 

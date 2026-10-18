@@ -65,12 +65,13 @@ class App:
 
     def new_exercise(self, name, **f):
         self.tab("Exercises"); self.click("[data-a=exNew]"); self.fill("input[data-b=name]", name)
-        if f.pop("mode", None) == "pct":
-            self.pg.select_option("select[data-b=mode]", "pct")
+        mode = f.pop("mode", None)
         for k, v in f.items():
             self.fill(f"input[data-b={k}]", v)
         self.click("[data-a=exSave]")
         self.pg.wait_for_function("n=>!S.view&&S.ex.some(e=>e.name==n)", arg=name, timeout=5000)  # saving is async
+        if mode:   # last-used mode (no longer a setting in the editor)
+            self.js("async([n,m])=>{const e=S.ex.find(x=>x.name==n);e.mode=m;await put('exercises',e)}", [name, mode])
 
     def seed_sets(self, ex_name, sessions):
         """sessions: list of lists of (w, r, rir[, warmup]) — oldest first, one day apart."""
@@ -359,6 +360,20 @@ def old_text_plans_and_backups_keep_working(app):
     d = app.js("(async()=>{const d={app:'liftlog',v:1};for(const n of STORES)d[n]=await all(n);return clean(d)})()")
     ci = d["templates"][0]["days"][0]["items"][0]
     eq((ci["mode"], ci["lines"][1]), ("pct", {"n": 2, "r": 1, "p": 85}), "backup keeps mode and lines")
+
+
+@test
+def exercises_have_no_tracking_type_but_remember_the_last_one(app):
+    app.new_exercise("Clean", cur=100)
+    app.click("[data-a=exOpen]")
+    eq(app.pg.locator("select[data-b=mode]").count(), 0, "no tracking setting on the exercise")
+    app.click("[data-a=back]")
+    ok("RIR" not in app.pg.inner_text(".exr") and "% of 1RM" not in app.pg.inner_text(".exr"), "the list doesn't show a tracking type")
+    app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
+    eq(app.js("W.items[0].mode"), "rir", "starts in RIR")
+    app.click("[data-a=mode][data-m=pct]"); app.pg.wait_for_timeout(150)
+    app.click("[data-a=pickAdd]"); app.click("#plist .chip")
+    eq(app.js("W.items[1].mode"), "pct", "next time it starts in the mode you used last")
 
 
 @test
