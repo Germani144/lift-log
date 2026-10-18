@@ -251,6 +251,116 @@ def edit_a_past_workout(app):
     app.pg.go_back(); app.pg.wait_for_timeout(150); eq(app.state()["view"], None, "back gesture closes the editor")
 
 
+def _plan_one(app, name, mode=None, line=None):
+    """Make an active one-day plan with a single exercise and start its workout."""
+    app.tab("Plans"); app.click("[data-a=tplNew]"); app.fill("input[data-b=name]", "P")
+    app.click('[data-tq="0"]'); app.pg.keyboard.type(name); app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(150)
+    if mode:
+        app.click(f'[data-a=tplMode][data-m={mode}]')
+    if line:
+        for k, v in line.items():
+            app.fill(f'input[data-b="days.0.items.0.lines.0.{k}"]', v)
+    app.click("[data-a=tplSave]")
+    app.tab("Train"); app.click("[data-a=planStart]"); app.click('[data-a=start][data-d="0"]')
+
+
+@test
+def percent_plan_and_switching_views(app):
+    app.new_exercise("Clean", inc=2, cur=100)             # default tracking: RIR
+    _plan_one(app, "Clean", "pct", {"n": 3, "r": 2, "p": 70})
+    eq(app.js("S.tpl[0].days[0].items[0].mode"), "pct")
+    eq(app.js("S.tpl[0].days[0].items[0].lines"), [{"n": 3, "r": 2, "p": 70}], "plan lines: sets x reps @ %")
+    eq(app.js("W.items[0].mode"), "pct", "workout starts in the plan's mode")
+    eq([r["w"] for r in app.js("W.items[0].rows")], [70, 70, 70], "no history yet: exactly the plan, 70% of 100")
+    hdr = app.pg.inner_text(".set.hdr")
+    ok("% of 1RM" in hdr and "RPE" in hdr, f"% view headers, got {hdr!r}")
+    row = lambda j: f'.set[data-j="{j}"] >> '
+    eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "input[data-f=rir]")), ("70", ""), "shows % and an empty RPE to fill in")
+    ok("70 kg" in app.pg.inner_text(row(0) + ".inf"), "shows the kg to load")
+    def log(j, rpe):
+        app.fill(row(j) + "input[data-f=rir]", rpe); app.pg.locator(row(j) + "input[data-f=rir]").dispatch_event("input"); app.click(row(j) + "[data-a=log]")
+    log(0, 7)
+    saved = app.js("(async()=>(await all('sets')).pop())()")
+    eq((saved["w"], saved["r"], saved["rir"]), (70, 2, 3), "RPE 7 is stored as RIR 3")
+    eq(app.js("W.items[0].rows[1].w"), 70, "first set with no history: nothing to compare with yet")
+    app.click("[data-a=mode][data-m=rir]")
+    eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "input[data-f=rir]")), ("70", "3"), "RIR view: same set as kg and RIR")
+    app.click("[data-a=mode][data-m=pct]")
+    log(1, 9)                                              # same weight felt much harder than set 1
+    w = app.js("W.items[0].rows[2].w")
+    ok(63 <= w < 70 and app.js("W.items[0].rows[2].adj"), f"harder than the first set: the next one gets lighter (max -10%), got {w}")
+    ok("adjusted" in app.pg.inner_text(row(2) + ".inf"), "shows that it adjusted")
+
+
+@test
+def percent_sets_follow_your_history(app):
+    app.new_exercise("Clean", inc=2, cur=100)
+    app.seed_sets("Clean", [[(70, 2, 3)] * 3] * 4)          # 70x2 usually feels like RPE 7
+    _plan_one(app, "Clean", "pct", {"n": 4, "r": 2, "p": 70})
+    eq([r["w"] for r in app.js("W.items[0].rows")], [70] * 4, "steady history: start at the plan")
+    row = lambda j: f'.set[data-j="{j}"] >> '
+    app.fill(row(1) + "input[data-f=w]", 74); app.pg.locator(row(1) + "input[data-f=w]").dispatch_event("input")   # my own choice for set 2
+    app.fill(row(0) + "input[data-f=rir]", 9); app.pg.locator(row(0) + "input[data-f=rir]").dispatch_event("input")
+    app.click(row(0) + "[data-a=log]")                      # today 70x2 is an RPE 9
+    rows = app.js("W.items[0].rows")
+    ok(63 <= rows[2]["w"] < 70, f"harder than usual: later sets get lighter, got {rows[2]['w']}")
+    eq(round(rows[1]["w"], 2), 74, "a set you edited yourself is left alone")
+    # next time: recent sessions felt harder than the longer run, so the plan starts lighter
+    app.click("[data-a=finish]")
+    app.seed_sets("Clean", [[(70, 2, 0)] * 3] * 2)
+    app.tab("Train"); app.click('[data-a=start][data-d="0"]')
+    w0 = app.js("W.items[0].rows[0].w")
+    ok(63 <= w0 < 70, f"recent sessions harder than usual: start below the plan, got {w0}")
+    ok("vs plan from recent sessions" in app.pg.inner_text(".card:has([data-a=addset])"), "says why")
+
+
+@test
+def rir_plan_targets_change_by_week(app):
+    app.new_exercise("Bench", lo=8, hi=12)
+    app.tab("Plans"); app.click("[data-a=tplNew]"); app.fill("input[data-b=name]", "P"); app.fill("input[data-b=weeks]", 2)
+    app.pg.locator("input[data-b=weeks]").dispatch_event("input")
+    app.click('[data-tq="0"]'); app.pg.keyboard.type("Bench"); app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(150)
+    eq(app.pg.locator(".wkr input").count(), 2, "one RIR box per week")
+    app.fill('input[data-b="days.0.items.0.lo"]', 5); app.fill('input[data-b="days.0.items.0.hi"]', 6)
+    app.fill('input[data-b="days.0.items.0.rirW.0"]', 3); app.fill('input[data-b="days.0.items.0.rirW.1"]', 1)
+    app.click("[data-a=tplSave]")
+    it = app.js("S.tpl[0].days[0].items[0]")
+    eq((it["lo"], it["hi"], it["rirW"]), (5, 6, [3, 1]), "the plan keeps its own rep range and weekly RIR")
+    app.tab("Train"); app.click("[data-a=planStart]"); app.click('[data-a=start][data-d="0"]')
+    eq((app.js("W.items[0].rirT"), app.js("W.items[0].lo"), app.js("W.items[0].hi")), (3, 5, 6), "week 1 uses W1")
+    row = '.set[data-j="0"] >> '
+    app.fill(row + "input[data-f=w]", 80); app.pg.locator(row + "input[data-f=w]").dispatch_event("input"); app.click(row + "[data-a=log]")
+    app.click("[data-a=finish]"); app.tab("Train"); app.click('[data-a=start][data-d="0"]')
+    eq(app.js("W.items[0].rirT"), 1, "week 2 uses W2")
+
+
+@test
+def rir_view_adjusts_next_sets_too(app):
+    app.new_exercise("Squat", lo=5, hi=8)
+    app.seed_sets("Squat", [[(100, 6, 2)] * 3] * 2)
+    app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
+    row = lambda j: f'.set[data-j="{j}"] >> '
+    app.fill(row(0) + "input[data-f=w]", 100); app.fill(row(0) + "input[data-f=r]", 8); app.fill(row(0) + "input[data-f=rir]", 4)
+    for f in ("w", "r", "rir"):
+        app.pg.locator(row(0) + f"input[data-f={f}]").dispatch_event("input")
+    app.click(row(0) + "[data-a=log]")                     # way easier than the 2-RIR target
+    w, r = app.js("[W.items[0].rows[1].w,W.items[0].rows[1].r]")
+    ok(w > 100 and r <= 8, f"next set should get heavier within the rep range, got {w}x{r}")
+
+
+@test
+def old_text_plans_and_backups_keep_working(app):
+    app.new_exercise("Clean", mode="pct", cur=100)
+    app.js("(async()=>{await put('templates',{name:'Old',weeks:8,days:[{name:'D',items:[{exId:S.ex[0].id,text:'3*80%x2\\n2*85%x1'}]}]});await load();render()})()")
+    app.pg.wait_for_timeout(200)
+    it = app.js("S.tpl[0].days[0].items[0]")
+    eq((it["mode"], it["lines"]), ("pct", [{"n": 3, "p": 80, "r": 2}, {"n": 2, "p": 85, "r": 1}]), "old text turns into lines")
+    app.js("(async()=>{const t=S.tpl[0];await put('templates',t)})()")
+    d = app.js("(async()=>{const d={app:'liftlog',v:1};for(const n of STORES)d[n]=await all(n);return clean(d)})()")
+    ci = d["templates"][0]["days"][0]["items"][0]
+    eq((ci["mode"], ci["lines"][1]), ("pct", {"n": 2, "r": 1, "p": 85}), "backup keeps mode and lines")
+
+
 @test
 def warmup_sets(app):
     app.new_exercise("Squat", lo=5, hi=8, wu=3)
