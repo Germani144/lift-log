@@ -12,7 +12,7 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 - **Warm-ups:** set 0–4 warm-up sets per exercise to get a ramp before your working sets; any set can be marked as a warm-up. Warm-ups never count toward suggestions or 1RM/PB.
 - **1RM and PB:** a set of 1 rep at 0 RIR counts as a tested 1RM; lifetime PB rises automatically.
 - **Plans:** days per week, number of weeks, per-day exercises with sets, rep range and RIR. Progress shows as a barbell bar on the Train page.
-- **History:** month calendar of training days, every workout listed, and per-exercise charts (max weight and volume per session).
+- **History:** month calendar of training days, every workout listed, and per-exercise charts (max weight and volume per session). Tap **Edit workout** on any past workout to change its date or name, edit any set (weight, reps, RIR, warm-up), remove sets or exercises, or add sets and exercises. The workout in progress is edited from the Train tab instead.
 - **Exercises:** alphabetical list with a search box.
 - **Navigation:** swipe left/right between tabs; the phone's back gesture closes the open page. The bottom bar is fixed and only the page above it scrolls; each tab opens at the top, and going back from an exercise returns you to the same place in the list.
 - **Backup:** automatic backup to a private GitHub repo (fine-grained token, Contents read/write on that repo only), plus manual export/import of a JSON file.

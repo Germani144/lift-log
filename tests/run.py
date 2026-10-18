@@ -222,6 +222,36 @@ def empty_weight_means_bodyweight(app):
 
 
 @test
+def edit_a_past_workout(app):
+    app.new_exercise("Squat"); app.new_exercise("Curl", inc=1)
+    app.seed_sets("Squat", [[(100, 5, 2), (100, 5, 2), (60, 8, None, 1)]])
+    before = app.js("(async()=>(await all('sets')).sort((a,b)=>a.t-b.t))()")
+    sess = before[0]["sess"]
+    app.tab("History"); app.click(f'[data-a=wedOpen][data-i="{sess}"]'); eq(app.state()["view"], "wed")
+    # cancel discards
+    app.fill('.eset[data-k="0"][data-j="0"] input[data-wf=w]', 999); app.click("[data-a=wedCancel]")
+    eq(app.js("(async()=>(await all('sets')).map(s=>s.w))()"), [100, 100, 60], "Cancel changes nothing")
+    app.click(f'[data-a=wedOpen][data-i="{sess}"]')
+    app.fill('.eset[data-k="0"][data-j="0"] input[data-wf=w]', 105)      # change a weight
+    app.fill('.eset[data-k="0"][data-j="0"] input[data-wf=rir]', 1)      # and its RIR
+    app.click('[data-a=wedRm][data-k="0"][data-j="1"]')                   # remove the 2nd set
+    app.click('[data-a=wedAddSet][data-k="0"]')                           # add a set (copies the last working set)
+    app.click('#wq'); app.pg.keyboard.type("Curl"); app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(150)
+    app.fill('.eset[data-k="1"][data-j="0"] input[data-wf=w]', 12); app.fill('.eset[data-k="1"][data-j="0"] input[data-wf=r]', 10)
+    app.fill("input[data-wn]", "Leg day")
+    app.pg.fill("input[data-wd]", app.js(f"dk({sess}-864e5)"))           # moved to the day before
+    app.click("[data-a=wedSave]"); app.pg.wait_for_timeout(300)
+    after = app.js("(async()=>(await all('sets')).sort((a,b)=>a.t-b.t).map(s=>[EX(s.exId).name,s.w,s.r,s.rir,!!s.wu,s.wn,s.sess]))()")
+    new_sess = sess - 86400000
+    eq(after, [["Squat", 105, 5, 1, False, "Leg day", new_sess], ["Squat", 60, 8, None, True, "Leg day", new_sess],
+               ["Squat", 105, 5, 1, False, "Leg day", new_sess], ["Curl", 12, 10, None, False, "Leg day", new_sess]], "saved edits")
+    eq(app.js("(async()=>(await all('sets')).sort((a,b)=>a.t-b.t)[0].id)()"), before[0]["id"], "edited set keeps its id")
+    app.click(f'[data-a=wedOpen][data-i="{new_sess}"]'); app.fill('.eset[data-k="1"][data-j="0"] input[data-wf=r]', "")
+    app.click("[data-a=wedSave]"); ok(app.state()["view"] == "wed", "can't save a set without reps")
+    app.pg.go_back(); app.pg.wait_for_timeout(150); eq(app.state()["view"], None, "back gesture closes the editor")
+
+
+@test
 def warmup_sets(app):
     app.new_exercise("Squat", lo=5, hi=8, wu=3)
     eq(app.js("S.ex[0].wu"), 3)
