@@ -377,6 +377,25 @@ def exercises_have_no_tracking_type_but_remember_the_last_one(app):
 
 
 @test
+def chart_shows_date_and_value_on_touch(app):
+    app.new_exercise("Squat")
+    app.seed_sets("Squat", [[(80, 5, 2)], [(90, 5, 2)], [(100, 5, 2)]])
+    app.click("[data-a=exOpen]")
+    sv = app.pg.locator("svg.chart").first
+    sv.scroll_into_view_if_needed(); app.pg.wait_for_timeout(150)
+    eq(app.js("document.querySelector('svg.chart .tip').getAttribute('visibility')"), "hidden", "no label until you touch")
+    box = sv.bounding_box()
+    app.pg.mouse.move(box["x"] + box["width"] * 0.97, box["y"] + box["height"] * 0.5)   # far right = newest session
+    label = app.js("document.querySelector('svg.chart .tip text').textContent")
+    ok(label.endswith("· 100 kg"), f"label shows the value, got {label!r}")
+    ok(any(m in label for m in ("Oct", "Nov", "Dec", "Jan", "Sep")) or label[0].isdigit(), f"label shows the date, got {label!r}")
+    app.pg.mouse.move(box["x"] + box["width"] * 0.13, box["y"] + box["height"] * 0.5)   # far left = oldest
+    ok(app.js("document.querySelector('svg.chart .tip text').textContent").endswith("· 80 kg"), "follows your finger")
+    app.pg.mouse.click(box["x"] + 5, box["y"] - 40)
+    eq(app.js("document.querySelector('svg.chart .tip').getAttribute('visibility')"), "hidden", "tap elsewhere hides it")
+
+
+@test
 def warmup_sets(app):
     app.new_exercise("Squat", lo=5, hi=8, wu=3)
     eq(app.js("S.ex[0].wu"), 3)

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6In5+0Sl51Ez2OqfbnSmzG8IHze6wqLK7PhmgIdC3WQ='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-VzbkPbHEOaxqbWLUOC3HsCbqWtsR1ZfWSD7lmf844Uk='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -122,6 +122,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:5px}
 #exq{margin:0 0 6px}
 .b.big.exr{display:flex;align-items:center;gap:12px}
 .exr .l{flex:1;min-width:0}
+svg.chart{touch-action:pan-y;cursor:crosshair;user-select:none;-webkit-user-select:none}
 .exr .r{text-align:right;flex:none}
 .exr .r b{display:block;font:700 28px/1 BC,system-ui,sans-serif}.exr .r b i{font:600 14px Bw,system-ui,sans-serif;font-style:normal;color:var(--m)}
 .exr .r small{display:block;font-size:12px;color:var(--m);font-weight:400}
@@ -149,7 +150,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const bb=(n,done,cur,label)=>`<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({length:n},(_,i)=>`<i${i<done?' class=d':cur&&i==done?' class=n':''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NI={train:'<svg viewBox="0 0 24 24"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',hist:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',tpl:'<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',ex:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>'};
 const scTo=(x,y)=>{const m=$('main');if(m)m.scrollTop=y},scY=()=>$('main')?.scrollTop||0;   // the page scrolls inside <main>, not the window
-const VER='2.1';   // app version, bumped automatically by tools/build.py on every change
+const VER='2.2';   // app version, bumped automatically by tools/build.py on every change
 const fmt=x=>x===''||x==null||isNaN(x)?'':+(+x).toFixed(2);
 const age=t=>{const d=Math.floor((Date.now()-t)/864e5);return d<1?'today':d<60?d+'d ago':Math.round(d/30.4)+'mo ago'};
 const dstr=t=>new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
@@ -395,11 +396,24 @@ function rEx(){return`<h2>Exercises</h2>`+
 function sessions(sets){const g={};sets.forEach(s=>(g[s.sess]??=[]).push(s));
  return Object.keys(g).map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),es=ss.filter(s=>s.rir!=null&&!s.test).map(s=>e1(s.w,s.r,s.rir));
   return{k:+k,t:ss[0].t,ss,vol:ss.reduce((a,s)=>a+s.r,0),top:ss.reduce((a,b)=>b.w>a.w?b:a),e:es.length?Math.max(...es):null}}).sort((a,b)=>b.k-a.k)}
-function chart(l,v,t,z){if(v.length<2)return'';const mx=Math.max(...v),mn=z?0:Math.min(...v),R=mx-mn||1,L=34,Rr=292,T=8,B=100,
+function chart(l,v,t,z,u=''){if(v.length<2)return'';const mx=Math.max(...v),mn=z?0:Math.min(...v),R=mx-mn||1,L=34,Rr=292,T=8,B=100,
  X=i=>(L+i/(v.length-1)*(Rr-L)).toFixed(1),Y=y=>(B-(y-mn)/R*(B-T)).toFixed(1),
  pts=v.map((y,i)=>X(i)+','+Y(y)).join(' '),d=x=>new Date(x).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'2-digit'});
- return`<div class=m style="margin-top:12px">${l}</div><svg viewBox="0 0 300 124" width="100%" role=img aria-label="${l}: from ${fmt(v[0])} to ${fmt(v[v.length-1])}"><g fill="var(--m)" font-size="10" font-family="Bw,system-ui,sans-serif"><text x="${L-5}" y="${T+3}" text-anchor="end">${fmt(mx)}</text><text x="${L-5}" y="${B+3}" text-anchor="end">${fmt(mn)}</text><text x="${L}" y="118">${d(t[0])}</text><text x="${Rr}" y="118" text-anchor="end">${d(t[t.length-1])}</text></g>
- <path d="M${L} ${T}V${B}H${Rr}" fill="none" stroke="var(--m)" stroke-width="1" opacity=".6"/><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linejoin="round"/></svg>`}
+ return`<div class=m style="margin-top:12px">${l}</div><svg class=chart viewBox="0 0 300 124" width="100%" role=img aria-label="${l}: from ${fmt(v[0])} to ${fmt(v[v.length-1])}" data-u="${u}" data-p="${v.map((y,i)=>X(i)+'|'+Y(y)+'|'+y+'|'+t[i]).join(';')}"><g fill="var(--m)" font-size="10" font-family="Bw,system-ui,sans-serif"><text x="${L-5}" y="${T+3}" text-anchor="end">${fmt(mx)}</text><text x="${L-5}" y="${B+3}" text-anchor="end">${fmt(mn)}</text><text x="${L}" y="118">${d(t[0])}</text><text x="${Rr}" y="118" text-anchor="end">${d(t[t.length-1])}</text></g>
+ <path d="M${L} ${T}V${B}H${Rr}" fill="none" stroke="var(--m)" stroke-width="1" opacity=".6"/><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linejoin="round"/>
+ <g class=tip visibility=hidden><line y1="${T}" y2="${B}" stroke="var(--fg)" stroke-width="1" opacity=".35"/><circle r="4" fill="var(--ac)" stroke="var(--c)" stroke-width="2"/><rect rx="5" fill="var(--c2)"/><text font-size="11" font-weight="600" fill="var(--fg)" text-anchor="middle" font-family="Bw,system-ui,sans-serif"></text></g></svg>`}
+// Touch, drag or hover on a chart: mark the nearest session and show its date and value.
+function chartTip(e){const sv=e.target.closest?.('svg.chart');
+ if(!sv){if(e.type=='pointerdown')document.querySelectorAll('svg.chart .tip').forEach(g=>g.setAttribute('visibility','hidden'));return}
+ const r=sv.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*300,pts=sv.dataset.p.split(';').map(p=>p.split('|').map(Number));
+ let b=pts[0];for(const p of pts)if(Math.abs(p[0]-x)<Math.abs(b[0]-x))b=p;
+ const[px,py,val,t]=b,g=sv.querySelector('.tip'),tx=g.querySelector('text'),rc=g.querySelector('rect'),u=sv.dataset.u;
+ g.querySelector('line').setAttribute('x1',px);g.querySelector('line').setAttribute('x2',px);
+ const c=g.querySelector('circle');c.setAttribute('cx',px);c.setAttribute('cy',py);
+ tx.textContent=`${new Date(t).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'2-digit'})} · ${u=='kg'&&!(val>0)?'BW':fmt(val)+(u?' '+u:'')}`;
+ g.setAttribute('visibility','visible');const w=tx.getComputedTextLength()+14,cx=Math.min(300-w/2-2,Math.max(w/2+2,px)),cy=py<30?py+22:py-12;
+ tx.setAttribute('x',cx);tx.setAttribute('y',cy+4);rc.setAttribute('x',cx-w/2);rc.setAttribute('y',cy-9);rc.setAttribute('width',w);rc.setAttribute('height',18)}
+addEventListener('pointermove',chartTip);addEventListener('pointerdown',chartTip);
 
 function rExd(){const e=E;if(e.cur===undefined)e.cur=e.id?S.pr[e.id]?.w??'':'';const n=k=>`type=number step=any data-n data-b=${k} value="${e[k]??''}"`;
  let h=`<button class=b data-a=back>‹ Back</button><div class=card>
@@ -416,7 +430,7 @@ function rExd(){const e=E;if(e.cur===undefined)e.cur=e.id?S.pr[e.id]?.w??'':'';c
  `<div class=row><input id=prw type=number step=any inputmode=decimal placeholder="Tested 1RM"><input id=prd type=date value="${new Date().toISOString().slice(0,10)}"><button class=b data-a=prAdd>Add PR</button></div></div>`;
  const ses=sessions(S.hist);
  h+=`<div class=card><b>History</b>`+(ses.length?
-  chart('Max weight per session (kg)',ses.map(x=>x.top.w).reverse(),ses.map(x=>x.t).reverse())+chart('Volume per session (reps)',ses.map(x=>x.vol).reverse(),ses.map(x=>x.t).reverse(),1)+
+  chart('Max weight per session (kg)',ses.map(x=>x.top.w).reverse(),ses.map(x=>x.t).reverse(),0,'kg')+chart('Volume per session (reps)',ses.map(x=>x.vol).reverse(),ses.map(x=>x.t).reverse(),1,'reps')+
   ses.map(x=>`<div class=card style="margin:8px 0"><div class=hd><b>${dstr(x.t)}</b><span class=m>volume ${x.vol} reps</span></div><div class=m>Top set ${wt(x.top.w)}×${x.top.r}${x.e?` · best e1RM ${fmt(x.e)}`:''}</div>`+
    x.ss.map(s=>`<div class=hl><span>${wt(s.w)} × ${s.r}${s.rir!=null?` @ ${fmt(s.rir)} RIR`:''}${s.test?' ★test':''}${s.wu?' <span class=m>warm-up</span>':''}</span><button data-a=sdel data-i=${s.id}>×</button></div>`).join('')+`</div>`).join('')
   :'<p class=m>No sets logged.</p>')+`</div>`;
