@@ -396,6 +396,36 @@ def chart_shows_date_and_value_on_touch(app):
 
 
 @test
+def bodyweight_lifts_use_total_load(app):
+    app.tab("Exercises"); app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
+    eq(app.js("BWv()"), 80, "bodyweight saved")
+    app.new_exercise("Pull-ups", inc=2, lo=6, hi=10, cur=40)          # 1RM is +40 kg
+    app.click("[data-a=exOpen]"); app.click("input[data-b=bwl]"); app.click("[data-a=exSave]")
+    eq(app.js("S.ex[0].bwl"), True)
+    ok("+40" in app.pg.inner_text(".exr"), "list shows the 1RM as added kg")
+    # % plan: 80% of (80 + 40) = 96 kg total = +16 kg on the belt
+    _plan_one(app, "Pull-ups", "pct", {"n": 3, "r": 3, "p": 80})
+    eq([r["w"] for r in app.js("W.items[0].rows")], [16, 16, 16], "80% of 120 kg total, minus 80 kg bodyweight")
+    row = '.set[data-j="0"] >> '
+    eq(app.pg.input_value(row + "input[data-f=w]"), "80", "shown as 80%")
+    ok("+16 kg" in app.pg.inner_text(row + ".inf"), "shows the added kg to load")
+    ok("incl. 80 kg bodyweight" in app.pg.inner_text(".card:has([data-a=addset])"), "says bodyweight is included")
+    app.click(row + "[data-a=log]")
+    eq(app.js("(async()=>(await all('sets')).pop().bw)()"), 80, "logged set remembers the bodyweight")
+
+
+@test
+def bodyweight_sets_count_toward_strength(app):
+    app.tab("Exercises"); app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
+    app.new_exercise("Dips", inc=2, lo=6, hi=10)
+    app.js("(async()=>{const e=S.ex[0];e.bwl=true;await put('exercises',e);await load()})()")
+    app.seed_sets("Dips", [[(0, 10, 2)] * 3] * 2)                     # 10 bodyweight dips @ 2 RIR, twice
+    eq(app.suggest("Dips")[0], [8, 6], "top of the range at bodyweight: add weight (+8 kg x 6), not just reps")
+    d = app.js("(async()=>{const d={app:'liftlog',v:1};for(const n of STORES)d[n]=await all(n);d.bw=BWv();return clean(d)})()")
+    eq((d["bw"], d["exercises"][0]["bwl"]), (80, True), "backup keeps bodyweight and the flag")
+
+
+@test
 def warmup_sets(app):
     app.new_exercise("Squat", lo=5, hi=8, wu=3)
     eq(app.js("S.ex[0].wu"), 3)
