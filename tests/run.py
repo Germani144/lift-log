@@ -53,7 +53,11 @@ class App:
         self.pg.locator(sel).first.click(); self.pg.wait_for_timeout(120)
 
     def fill(self, sel, v):
-        self.pg.locator(sel).first.fill(str(v))
+        loc = self.pg.locator(sel).first
+        if loc.evaluate("e=>e.tagName") == "SELECT":   # RIR/RPE are picked from a list
+            loc.select_option(value=str(v))
+        else:
+            loc.fill(str(v))
 
     def tab(self, name):
         self.click(f'nav button:has-text("{name}")')
@@ -139,7 +143,7 @@ def main_flow(app):
     app.click("[data-a=pickAdd]"); app.pg.keyboard.type("Bench"); app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(200)
     eq(app.state()["rows"], "3:0,3:0")
     row = '.set[data-j="0"] >> nth=0 >> '
-    app.fill(row + "input[data-f=w]", 40); app.fill(row + "input[data-f=r]", 10); app.fill(row + "input[data-f=rir]", 2)
+    app.fill(row + "input[data-f=w]", 40); app.fill(row + "input[data-f=r]", 10); app.fill(row + "[data-f=rir]", 2)
     app.click(row + "[data-a=log]")
     eq(app.state()["rows"], "3:1,3:0", "set logged")
     ok(app.js("W.restEnd>Date.now()"), "rest timer starts after logging")
@@ -209,7 +213,7 @@ def empty_weight_means_bodyweight(app):
     app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
     row = '.set[data-j="0"] >> '
     eq((app.pg.input_value(row + "input[data-f=w]"), app.pg.get_attribute(row + "input[data-f=w]", "placeholder")), ("", None), "an unlogged empty weight stays empty")
-    app.fill(row + "input[data-f=w]", ""); app.fill(row + "input[data-f=r]", 8); app.fill(row + "input[data-f=rir]", 2)
+    app.fill(row + "input[data-f=w]", ""); app.fill(row + "input[data-f=r]", 8); app.fill(row + "[data-f=rir]", 2)
     app.click(row + "[data-a=log]")
     eq(app.dialogs, [], "no prompt")
     ok(app.js("W.items[0].rows[0].done"), "a set with no weight logs as bodyweight")
@@ -234,7 +238,7 @@ def edit_a_past_workout(app):
     eq(app.js("(async()=>(await all('sets')).map(s=>s.w))()"), [100, 100, 60], "Cancel changes nothing")
     app.click(f'[data-a=wedOpen][data-i="{sess}"]')
     app.fill('.eset[data-k="0"][data-j="0"] input[data-wf=w]', 105)      # change a weight
-    app.fill('.eset[data-k="0"][data-j="0"] input[data-wf=rir]', 1)      # and its RIR
+    app.fill('.eset[data-k="0"][data-j="0"] [data-wf=rir]', 1)      # and its RIR
     app.click('[data-a=wedRm][data-k="0"][data-j="1"]')                   # remove the 2nd set
     app.click('[data-a=wedAddSet][data-k="0"]')                           # add a set (copies the last working set)
     app.click('#wq'); app.pg.keyboard.type("Curl"); app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(150)
@@ -276,16 +280,16 @@ def percent_plan_and_switching_views(app):
     hdr = app.pg.inner_text(".set.hdr")
     ok("% of 1RM" in hdr and "RPE" in hdr, f"% view headers, got {hdr!r}")
     row = lambda j: f'.set[data-j="{j}"] >> '
-    eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "input[data-f=rir]")), ("70", ""), "shows % and an empty RPE to fill in")
+    eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "[data-f=rir]")), ("70", ""), "shows % and an empty RPE to fill in")
     ok("70 kg" in app.pg.inner_text(row(0) + ".inf"), "shows the kg to load")
     def log(j, rpe):
-        app.fill(row(j) + "input[data-f=rir]", rpe); app.pg.locator(row(j) + "input[data-f=rir]").dispatch_event("input"); app.click(row(j) + "[data-a=log]")
+        app.fill(row(j) + "[data-f=rir]", 10 - rpe); app.pg.locator(row(j) + "[data-f=rir]").dispatch_event("input"); app.click(row(j) + "[data-a=log]")
     log(0, 7)
     saved = app.js("(async()=>(await all('sets')).pop())()")
     eq((saved["w"], saved["r"], saved["rir"]), (70, 2, 3), "RPE 7 is stored as RIR 3")
     eq(app.js("W.items[0].rows[1].w"), 70, "first set with no history: nothing to compare with yet")
     app.click("[data-a=mode][data-m=rir]")
-    eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "input[data-f=rir]")), ("70", "3"), "RIR view: same set as kg and RIR")
+    eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "[data-f=rir]")), ("70", "3"), "RIR view: same set as kg and RIR")
     app.click("[data-a=mode][data-m=pct]")
     log(1, 9)                                              # same weight felt much harder than set 1
     w = app.js("W.items[0].rows[2].w")
@@ -301,8 +305,8 @@ def percent_sets_follow_your_history(app):
     eq([r["w"] for r in app.js("W.items[0].rows")], [70] * 4, "steady history: start at the plan")
     row = lambda j: f'.set[data-j="{j}"] >> '
     app.fill(row(1) + "input[data-f=w]", 74); app.pg.locator(row(1) + "input[data-f=w]").dispatch_event("input")   # my own choice for set 2
-    app.fill(row(0) + "input[data-f=rir]", 9); app.pg.locator(row(0) + "input[data-f=rir]").dispatch_event("input")
-    app.click(row(0) + "[data-a=log]")                      # today 70x2 is an RPE 9
+    app.fill(row(0) + "[data-f=rir]", 1); app.pg.locator(row(0) + "[data-f=rir]").dispatch_event("input")
+    app.click(row(0) + "[data-a=log]")                      # today 70x2 is an RPE 9 (= 1 RIR)
     rows = app.js("W.items[0].rows")
     ok(63 <= rows[2]["w"] < 70, f"harder than usual: later sets get lighter, got {rows[2]['w']}")
     eq(round(rows[1]["w"], 2), 74, "a set you edited yourself is left alone")
@@ -321,9 +325,9 @@ def rir_plan_targets_change_by_week(app):
     app.tab("Plans"); app.click("[data-a=tplNew]"); app.fill("input[data-b=name]", "P"); app.fill("input[data-b=weeks]", 2)
     app.pg.locator("input[data-b=weeks]").dispatch_event("input")
     app.click('[data-tq="0"]'); app.pg.keyboard.type("Bench"); app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(150)
-    eq(app.pg.locator(".wkr input").count(), 2, "one RIR box per week")
+    eq(app.pg.locator(".wkr select").count(), 2, "one RIR box per week")
     app.fill('input[data-b="days.0.items.0.lo"]', 5); app.fill('input[data-b="days.0.items.0.hi"]', 6)
-    app.fill('input[data-b="days.0.items.0.rirW.0"]', 3); app.fill('input[data-b="days.0.items.0.rirW.1"]', 1)
+    app.fill('[data-b="days.0.items.0.rirW.0"]', 3); app.fill('[data-b="days.0.items.0.rirW.1"]', 1)
     app.click("[data-a=tplSave]")
     it = app.js("S.tpl[0].days[0].items[0]")
     eq((it["lo"], it["hi"], it["rirW"]), (5, 6, [3, 1]), "the plan keeps its own rep range and weekly RIR")
@@ -341,9 +345,9 @@ def rir_view_adjusts_next_sets_too(app):
     app.seed_sets("Squat", [[(100, 6, 2)] * 3] * 2)
     app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
     row = lambda j: f'.set[data-j="{j}"] >> '
-    app.fill(row(0) + "input[data-f=w]", 100); app.fill(row(0) + "input[data-f=r]", 8); app.fill(row(0) + "input[data-f=rir]", 4)
+    app.fill(row(0) + "input[data-f=w]", 100); app.fill(row(0) + "input[data-f=r]", 8); app.fill(row(0) + "[data-f=rir]", 4)
     for f in ("w", "r", "rir"):
-        app.pg.locator(row(0) + f"input[data-f={f}]").dispatch_event("input")
+        app.pg.locator(row(0) + f"[data-f={f}]").dispatch_event("input")
     app.click(row(0) + "[data-a=log]")                     # way easier than the 2-RIR target
     w, r = app.js("[W.items[0].rows[1].w,W.items[0].rows[1].r]")
     ok(w > 100 and r <= 8, f"next set should get heavier within the rep range, got {w}x{r}")
@@ -423,6 +427,25 @@ def bodyweight_sets_count_toward_strength(app):
     eq(app.suggest("Dips")[0], [8, 6], "top of the range at bodyweight: add weight (+8 kg x 6), not just reps")
     d = app.js("(async()=>{const d={app:'liftlog',v:1};for(const n of STORES)d[n]=await all(n);d.bw=BWv();return clean(d)})()")
     eq((d["bw"], d["exercises"][0]["bwl"]), (80, True), "backup keeps bodyweight and the flag")
+
+
+@test
+def rir_is_picked_and_5plus_is_ignored_for_suggestions(app):
+    app.new_exercise("Squat", lo=5, hi=8)
+    app.seed_sets("Squat", [[(100, 6, 2)] * 3] * 2)
+    before = app.suggest("Squat")
+    app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
+    row = '.set[data-j="0"] >> '
+    opts = app.js("[...document.querySelector('.set[data-j=\"0\"] [data-f=rir]').options].map(o=>o.textContent)")
+    eq(opts, ["RIR", "0", "0.5", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5", "5+"], "0-5 in half steps, then 5+")
+    app.fill(row + "[data-f=w]", 60); app.pg.locator(row + "[data-f=w]").dispatch_event("input")
+    app.fill(row + "[data-f=rir]", 6); app.click(row + "[data-a=log]")
+    eq(app.js("(async()=>(await all('sets')).pop().rir)()"), 6, "5+ is stored")
+    ok("not used for suggestions" in app.pg.inner_text(row + ".inf"), "says it's not used")
+    eq(app.js("W.items[0].rows[1].adj||false"), False, "a 5+ set doesn't adjust the next sets")
+    app.click("[data-a=finish]"); app.tab("History"); app.click(".cd.td")
+    ok("RIR 5+" in app.pg.inner_text("main"), "history shows 5+")
+    eq(app.suggest("Squat"), before, "and suggestions ignore it, like a warm-up")
 
 
 @test
