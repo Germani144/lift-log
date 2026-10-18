@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-qR2lnT3oitJZzAJWT97Qsh7yDI7h4LbBI6e7FkH5ngw='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ABLv7FHBHvtru8/LDZcIQq+4Umt2YmKsIIrxIDg4p0I='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -135,7 +135,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const bb=(n,done,cur,label)=>`<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({length:n},(_,i)=>`<i${i<done?' class=d':cur&&i==done?' class=n':''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NI={train:'<svg viewBox="0 0 24 24"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',hist:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',tpl:'<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',ex:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>'};
 const scTo=(x,y)=>{const m=$('main');if(m)m.scrollTop=y},scY=()=>$('main')?.scrollTop||0;   // the page scrolls inside <main>, not the window
-const VER='1.0';   // app version, bumped automatically by tools/build.py on every change
+const VER='1.1';   // app version, bumped automatically by tools/build.py on every change
 const fmt=x=>x===''||x==null||isNaN(x)?'':+(+x).toFixed(2);
 const age=t=>{const d=Math.floor((Date.now()-t)/864e5);return d<1?'today':d<60?d+'d ago':Math.round(d/30.4)+'mo ago'};
 const dstr=t=>new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
@@ -196,8 +196,8 @@ async function suggest(ex,n){
  const ss=(await all('sets','ex',ex.id)).filter(s=>!s.wu).sort((a,b)=>a.t-b.t),rows=[],aim=`${ex.lo}–${ex.hi} reps @ ${ex.rir} RIR`,
   sess=[...new Set(ss.map(s=>s.sess))],fat=j=>Math.floor(j/2);   // later sets: about 1 rep fewer every 2 sets
  const lastS=ss.filter(s=>s.sess==sess[sess.length-1]),hint=lastS.length?`Last: ${lastS.map(s=>`${wt(s.w)}×${s.r}${s.rir!=null?' @'+fmt(s.rir):''}`).join(', ')} · ${aim}`:`${aim} · no history yet`;
- if(!(ex.inc>0)){   // bodyweight: progress reps
-  const by=new Map();for(const s of ss)if(!s.wu&&s.rir!=null&&s.rir<5)by.set(s.sess,Math.max(by.get(s.sess)||0,s.r+s.rir));
+ if(!(ex.inc>0)||(lastS.length&&Math.max(...lastS.map(s=>s.w))===0)){   // bodyweight (or done at bodyweight last time): progress reps
+  const by=new Map();for(const s of ss)if(!s.wu&&s.rir!=null&&s.rir<5&&(!(ex.inc>0)||s.w===0))by.set(s.sess,Math.max(by.get(s.sess)||0,s.r+s.rir));
   const v=[...by.values()].slice(-4);let cap=null;if(v.length){let a=0,b=0;v.forEach((x,i)=>{a+=x*(i+1);b+=i+1});cap=a/b}
   const lb=lastS.filter(s=>s.rir!=null&&s.rir<5).reduce((m,s)=>Math.max(m,s.r+s.rir),0),
    w=lastS.length?Math.max(...lastS.map(s=>s.w)):'',rS=cap==null?null:Math.round(cap-ex.rir),
@@ -248,7 +248,7 @@ function card(it,i){const ex=EX(it.exId);if(!ex)return'';const pr=S.pr[ex.id];
  let h=`<div class=card><div class=hd><b style="flex:1">${esc(ex.name)}</b><span class=m>${pr?`1RM ${fmt(pr.w)} · ${age(pr.t)}`:ex.mode=='pct'?'no 1RM':''}</span><button class=s style="width:40px" data-a=rmx data-i=${i} aria-label="Remove exercise">×</button></div><div class=m>${esc(it.hint||'')}</div>`;
  h+=`<div class="set hdr"><span></span><span>Weight (kg)</span><span></span><span>Reps</span><span>RIR</span><span></span></div>`+it.rows.map((r,j)=>{const x=info(r,ex),d=r.done?'disabled':'';
   return`<div class="set ${r.done?'dn':''}${r.wu?' wu':''}" data-i=${i} data-j=${j}>
-  <button class=s data-a=step data-d=-1 ${d}>−</button><input data-f=w inputmode=decimal placeholder=kg aria-label="Weight in kg" value="${fmt(r.w)}" ${d}>
+  <button class=s data-a=step data-d=-1 ${d}>−</button><input data-f=w inputmode=decimal placeholder=BW aria-label="Weight in kg, empty for bodyweight" value="${r.w>0?fmt(r.w):''}" ${d}>
   <button class=s data-a=step data-d=1 ${d}>+</button>
   <input data-f=r inputmode=numeric placeholder=reps aria-label=Reps value="${fmt(r.r)}" ${d}><input data-f=rir inputmode=decimal placeholder=RIR aria-label="Reps in reserve" value="${fmt(r.rir)}" ${d}>
   <button class="ck ${r.done?'on':''}" data-a=${r.done?'undo':'log'} aria-label="${r.done?'Undo set':'Log set'}">${r.done?'✓':'○'}</button>
@@ -529,7 +529,7 @@ const A={
  step:(s,d)=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j];
   r.w=Math.max(0,rnd((+r.w||0)+ +d.d*(EX(it.exId).inc||2),.001));$('[data-f=w]',s).value=fmt(r.w);saveW();updInfo(s)},
  log:async s=>{const it=W.items[s.dataset.i],r=it.rows[s.dataset.j],ex=EX(it.exId);
-  if(!(r.r>0&&(r.w>0||!(ex.inc>0))))return toast(ex.inc>0?'Enter weight and reps':'Enter reps');
+  if(!(r.r>0))return toast('Enter reps');   // empty or 0 weight = bodyweight (BW)
   if(r.rir!==''&&r.rir!=null&&!(+r.rir>=0&&+r.rir<=10))return toast('RIR must be between 0 and 10. Leave it blank if you don\'t track it.');
   const test=!r.wu&&isTest(r);
   const rec={exId:ex.id,sess:W.sess,wn:W.name,pd:W.pd,t:Date.now(),w:+r.w||0,r:r.r,rir:hasR(r)?r.rir:null,test};if(r.wu)rec.wu=true;

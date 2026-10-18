@@ -203,6 +203,24 @@ def suggestions_bodyweight_and_no_history(app):
 
 
 @test
+def empty_weight_means_bodyweight(app):
+    app.new_exercise("Pull-ups", inc=2, lo=6, hi=10)        # an exercise that *can* take weight
+    app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
+    row = '.set[data-j="0"] >> '
+    eq(app.pg.get_attribute(row + "input[data-f=w]", "placeholder"), "BW", "empty weight box reads BW")
+    app.fill(row + "input[data-f=w]", ""); app.fill(row + "input[data-f=r]", 8); app.fill(row + "input[data-f=rir]", 2)
+    app.click(row + "[data-a=log]")
+    eq(app.dialogs, [], "no prompt")
+    ok(app.js("W.items[0].rows[0].done"), "a set with no weight logs as bodyweight")
+    last = app.js("(async()=>(await all('sets')).pop())()")
+    eq((last["w"], last["r"]), (0, 8), "saved as 0 kg")
+    app.click("[data-a=finish]"); app.tab("History"); app.click(".cd.tr")
+    ok("BW × 8" in app.pg.inner_text("main"), "history shows BW")
+    app.seed_sets("Pull-ups", [[(0, 8, 2)] * 3] * 2)
+    eq(app.suggest("Pull-ups")[0], ["", 9], "after bodyweight sessions: no weight, one more rep")
+
+
+@test
 def warmup_sets(app):
     app.new_exercise("Squat", lo=5, hi=8, wu=3)
     eq(app.js("S.ex[0].wu"), 3)
