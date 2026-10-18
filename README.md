@@ -6,7 +6,7 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 
 ## Features
 
-- **Train:** start a day from your active plan or a quick workout. Log weight, reps and RIR per set (leave the weight empty or 0 for a bodyweight set, shown as BW); a rest timer starts after each set (tap the time to change it, ±15 s buttons). Add or replace exercises by typing a name.
+- **Train:** start a day from your active plan or a quick workout. Log weight, reps and RIR per set (leave the weight empty or 0 for a bodyweight set; it shows as BW once logged). Tap the light checkmark to log a set; it turns into a filled red check; a rest timer starts after each set (tap the time to change it, ±15 s buttons). Add or replace exercises by typing a name.
 - **Suggestions:** for RIR exercises, each set's weight and reps come from your estimated strength (average of your last 4 sessions, working sets only, preferring a similar rep range) and the target rep range and RIR. You get one more rep than last time; at the top of the range the weight goes up and reps reset. Later sets drop a rep every two sets for fatigue. If your last session of an exercise was all bodyweight, the suggestion stays at bodyweight and adds a rep.
 - **% of 1RM exercises:** sets written as `3*80%x5` in a plan, using your current 1RM.
 - **Warm-ups:** set 0–4 warm-up sets per exercise to get a ramp before your working sets; any set can be marked as a warm-up. Warm-ups never count toward suggestions or 1RM/PB.

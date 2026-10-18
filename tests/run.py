@@ -207,13 +207,14 @@ def empty_weight_means_bodyweight(app):
     app.new_exercise("Pull-ups", inc=2, lo=6, hi=10)        # an exercise that *can* take weight
     app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
     row = '.set[data-j="0"] >> '
-    eq(app.pg.get_attribute(row + "input[data-f=w]", "placeholder"), "BW", "empty weight box reads BW")
+    eq((app.pg.input_value(row + "input[data-f=w]"), app.pg.get_attribute(row + "input[data-f=w]", "placeholder")), ("", None), "an unlogged empty weight stays empty")
     app.fill(row + "input[data-f=w]", ""); app.fill(row + "input[data-f=r]", 8); app.fill(row + "input[data-f=rir]", 2)
     app.click(row + "[data-a=log]")
     eq(app.dialogs, [], "no prompt")
     ok(app.js("W.items[0].rows[0].done"), "a set with no weight logs as bodyweight")
     last = app.js("(async()=>(await all('sets')).pop())()")
     eq((last["w"], last["r"]), (0, 8), "saved as 0 kg")
+    eq(app.pg.input_value(row + "input[data-f=w]"), "BW", "once logged, an empty weight shows BW")
     app.click("[data-a=finish]"); app.tab("History"); app.click(".cd.tr")
     ok("BW × 8" in app.pg.inner_text("main"), "history shows BW")
     app.seed_sets("Pull-ups", [[(0, 8, 2)] * 3] * 2)
