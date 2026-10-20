@@ -1,6 +1,6 @@
 # Lift Log
 
-Offline workout tracker that runs as a single-file web app on your phone: https://germani144.github.io/lift-log/
+Offline workout tracker that runs as a single-file web app on your phone: https://germani144-lift.github.io/lift-log/
 
 Everything lives in the browser on your phone (IndexedDB), with optional automatic backup to a private GitHub repo.
 
@@ -45,13 +45,13 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 
 ## Offline and shared storage
 
-All of the apps on germani144.github.io share one origin, so they share one CacheStorage and one localStorage. Lift Log keeps to its own:
+Lift Log has its own address (`germani144-lift.github.io`, a free GitHub organization) because Chrome on Android installs only one app per address; it moved there from `germani144.github.io` on 2026-10-20. It still keeps strictly to its own storage:
 
 - **Service worker:** its cache is named `lift-log-<hash>` (the build sets the hash). On activate it only deletes its *own* old caches (`lift-log-…`, and the old `liftlog-…`), never another app's. It reads only from its own cache and only handles requests inside its scope (`/lift-log/`); the GitHub API for backups is never touched.
 - **Updates:** network first with `cache: 'no-cache'`, falling back to the cached copy offline, and registered with `updateViaCache: 'none'`, so a new deploy shows up the next time you open the app.
 - **localStorage:** every key starts with `lift-log:`. Older unprefixed keys are moved over once on first launch.
 - **IndexedDB:** your data lives in a database named `liftlog`, separate from other apps' databases.
-- **Install (manifest):** `scope` and `start_url` are `./` (only this app's folder) and `id` is `/lift-log/`. Chrome resolves `id` from the site root, so an id of `./` would claim the whole site and clash with the other apps ("already installed"). The build check enforces all three. If the installed app on a phone predates this, uninstall and reinstall it once.
+- **Install (manifest):** `scope` and `start_url` are `./` (only this app's folder) and `id` is `/lift-log/`. The build check enforces all three. Never change the `id` of an installed app: phones treat a new id as a different app.
 
 ## What the checks cover
 
