@@ -105,6 +105,19 @@ def shared_origin_checks(html, js, sw):
         fail("index.html: localStorage keys must be prefixed (use LSP + key, or ls()/lg())")
 
 
+def manifest_checks():
+    """Every app shares germani144.github.io. A manifest must claim only its own folder, and its id must be
+    unique: Chrome resolves "id" against the site root, so "./" would mean the whole site."""
+    import json
+    m = json.loads((ROOT / "manifest.webmanifest").read_text())
+    if m.get("scope") != "./":
+        fail('manifest: "scope" must be "./" (this app\'s own folder)')
+    if m.get("start_url") != "./":
+        fail('manifest: "start_url" must be "./"')
+    if m.get("id") != "/lift-log/":
+        fail('manifest: "id" must be "/lift-log/" (resolved from the site root, so it must name the folder)')
+
+
 def shell_files(sw):
     m = re.search(r"const SHELL=\[(.*?)\];", sw, re.S)
     if not m:
@@ -131,6 +144,7 @@ def main():
     new_html = re.sub(r"script-src 'sha256-[^']+'", f"script-src '{h}'", html_v)
     security_checks(new_html, js)
     shared_origin_checks(new_html, js, sw)
+    manifest_checks()
     files = shell_files(sw)
     digest = hashlib.sha256()
     for f in files:

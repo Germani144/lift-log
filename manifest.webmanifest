@@ -1,7 +1,7 @@
 {
  "name": "Lift Log",
  "short_name": "Lift Log",
- "id": "./",
+ "id": "/lift-log/",
  "start_url": "./",
  "scope": "./",
  "display": "standalone",

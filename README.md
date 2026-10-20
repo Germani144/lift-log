@@ -51,6 +51,7 @@ All of the apps on germani144.github.io share one origin, so they share one Cach
 - **Updates:** network first with `cache: 'no-cache'`, falling back to the cached copy offline, and registered with `updateViaCache: 'none'`, so a new deploy shows up the next time you open the app.
 - **localStorage:** every key starts with `lift-log:`. Older unprefixed keys are moved over once on first launch.
 - **IndexedDB:** your data lives in a database named `liftlog`, separate from other apps' databases.
+- **Install (manifest):** `scope` and `start_url` are `./` (only this app's folder) and `id` is `/lift-log/`. Chrome resolves `id` from the site root, so an id of `./` would claim the whole site and clash with the other apps ("already installed"). The build check enforces all three. If the installed app on a phone predates this, uninstall and reinstall it once.
 
 ## What the checks cover
 

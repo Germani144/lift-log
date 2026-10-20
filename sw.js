@@ -1,4 +1,4 @@
-const C='lift-log-2240b943d9';
+const C='lift-log-dbd6c69d1d';
 // Every app on germani144.github.io shares one CacheStorage. This worker only ever touches caches whose
 // name starts with its own prefix ("liftlog-" was this app's old prefix), and only requests inside its scope.
 const OWN=['lift-log-','liftlog-'];

@@ -509,6 +509,15 @@ def storage_keys_are_prefixed_and_old_ones_move_over(app):
 
 
 @test
+def manifest_claims_only_this_app(app):
+    """Chrome resolves the manifest id from the site root; it must come out as /lift-log/, not the whole site."""
+    m = app.ctx.new_cdp_session(app.pg).send("Page.getAppManifest").get("manifest") or {}
+    base = app.pg.url.rsplit("/", 1)[0] + "/"
+    eq((m.get("scope"), m.get("startUrl")), (base, base), "scope and start_url are this app's folder")
+    ok(m.get("id", "").endswith("/lift-log/"), f"id must be .../lift-log/, got {m.get('id')!r}")
+
+
+@test
 def warmup_sets(app):
     app.new_exercise("Squat", lo=5, hi=8, wu=3)
     eq(app.js("S.ex[0].wu"), 3)
