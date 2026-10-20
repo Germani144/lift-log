@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+S3ktZZ4VgusVBdVHALIaPiyWKvDzubjKkcP54JKDdU='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UeV43cEadIZlNTO6o9+XhyWlp0nGsfQiim5cNfjfpiM='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -157,7 +157,17 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const bb=(n,done,cur,label)=>`<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({length:n},(_,i)=>`<i${i<done?' class=d':cur&&i==done?' class=n':''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NI={train:'<svg viewBox="0 0 24 24"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',hist:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',tpl:'<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',ex:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>'};
 const scTo=(x,y)=>{const m=$('main');if(m)m.scrollTop=y},scY=()=>$('main')?.scrollTop||0;   // the page scrolls inside <main>, not the window
-const VER='2.4';   // app version, bumped automatically by tools/build.py on every change
+const VER='2.5';   // app version, bumped automatically by tools/build.py on every change
+/* All of Germani144's apps share this origin's localStorage, so every Lift Log key starts with "lift-log:".
+   Old unprefixed keys are moved once. Keys whose content proves they're Lift Log's (workout in progress, backup
+   settings) are removed afterwards; generic ones (rest, bw, lb, dirty) are copied only if they look valid, and
+   left in place because another app might own a key with the same name. */
+const LSP='lift-log:';
+(()=>{try{const L=localStorage,J=v=>{try{return JSON.parse(v)}catch{return null}},num=(a,b)=>v=>+v>=a&&+v<=b;
+ const sure={w:v=>{const o=J(v);return!!(o&&Array.isArray(o.items)&&o.sess>0)},gh:v=>{const o=J(v);return!!(o&&o.token&&/lift-log/i.test(o.repo||''))},gherr:v=>/^Last automatic backup failed/.test(v)},
+  looks={rest:num(15,1800),bw:num(20,400),lb:num(1.5e12,4e12),dirty:v=>v=='0'||v=='1'};
+ for(const k of [...Object.keys(sure),...Object.keys(looks)]){const v=L.getItem(k);if(v==null||L.getItem(LSP+k)!=null)continue;
+  if(sure[k]){if(sure[k](v)){L.setItem(LSP+k,v);L.removeItem(k)}}else if(looks[k](v))L.setItem(LSP+k,v)}}catch{}})();
 const fmt=x=>x===''||x==null||isNaN(x)?'':+(+x).toFixed(2);
 const age=t=>{const d=Math.floor((Date.now()-t)/864e5);return d<1?'today':d<60?d+'d ago':Math.round(d/30.4)+'mo ago'};
 const dstr=t=>new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
@@ -187,8 +197,8 @@ const del=(n,id)=>(touch(),rq(st(n,'readwrite').delete(id)));
 
 /* ---------- state ---------- */
 let S={tab:'train',view:null,ex:[],tpl:[],pr:{},prl:[],hist:[]},E=null,W=null;
-try{W=JSON.parse(localStorage.getItem('w')||'null')}catch{}
-const saveW=()=>{try{localStorage.setItem('w',JSON.stringify(W))}catch{}};
+try{W=JSON.parse(localStorage.getItem(LSP+'w')||'null')}catch{}
+const saveW=()=>{try{localStorage.setItem(LSP+'w',JSON.stringify(W))}catch{}};
 const EX=id=>S.ex.find(e=>e.id==id);
 async function load(){
  S.ex=await all('exercises');S.tpl=await all('templates');S.sets=await all('sets');S.pr={};
@@ -335,7 +345,7 @@ function infoTxt(it,r,ex){const P=it.mode=='pct',x=info(r,ex),kg=P?(it.bwo?(+r.w
   note=x.s&&(!P||x.w||isTest(r)||r.wu)?`<span class="${x.w?'wr':''}">${esc(x.s)}</span>`:'';   // % view: just the kg, plus warnings
  return[kg,note,adj].filter(Boolean).join(' · ')}
 
-function lastBackup(){try{return +localStorage.getItem('lb')||0}catch{return 0}}
+function lastBackup(){try{return +localStorage.getItem(LSP+'lb')||0}catch{return 0}}
 function nag(){const lb=lastBackup();
  return S.sets.length&&Date.now()-lb>6048e5?`<div class=card><span class=wr>Back up your data</span><div class=m>${lb?'Last backup '+age(lb):'No backup yet'}. Clearing browser data erases your history.</div><button class=b data-a=backup>Export backup</button></div>`:''}
 function planRun(t){const dpw=t.days.length,seen=new Map();
@@ -743,7 +753,7 @@ async function exportData(){const d={app:'liftlog',v:1,t:Date.now()};for(const n
  const name=`liftlog-${new Date().toISOString().slice(0,10)}.json`,f=new File([JSON.stringify(d)],name,{type:'application/json'});
  try{if(navigator.canShare?.({files:[f]}))await navigator.share({files:[f]});else throw 0}
  catch(e){if(e&&e.name=='AbortError')return;const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=name;a.click()}
- try{localStorage.setItem('lb',Date.now())}catch{}toast('Backup exported');render()}
+ try{localStorage.setItem(LSP+'lb',Date.now())}catch{}toast('Backup exported');render()}
 /* ---------- import validation: rebuild every record from known fields only ---------- */
 function clean(d){
  const num=(x,k)=>{if(typeof x!='number'||!isFinite(x))throw new Error('bad '+k);return x},
@@ -768,8 +778,8 @@ async function applyBackup(d){
  W=null;saveW();S.view=null;E=null;await load();render();toast('Backup restored');return true}
 
 /* ---------- automatic backup to a private GitHub repo ---------- */
-let bt;const ls=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
-const lg=k=>{try{return localStorage.getItem(k)}catch{return null}};
+let bt;const ls=(k,v)=>{try{localStorage.setItem(LSP+k,v)}catch{}};
+const lg=k=>{try{return localStorage.getItem(LSP+k)}catch{return null}};
 const ghCfg=()=>{try{return JSON.parse(lg('gh')||'null')}catch{return null}};
 const ghUrl=g=>`https://api.github.com/repos/${g.repo}/contents/liftlog-backup.json`;
 const ghH=(g,a='application/vnd.github+json')=>({Authorization:'Bearer '+g.token,Accept:a});
@@ -807,7 +817,7 @@ Object.assign(A,{
 addEventListener('online',()=>ghCfg()&&autoBackup());
 
 /* ---------- boot / PWA ---------- */
-if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js',{scope:'./',updateViaCache:'none'}).catch(()=>{});
 navigator.storage?.persist?.();
 $('#sver').textContent='v'+VER;
 const hideSplash=()=>{const e=$('#splash');if(!e)return;e.classList.add('out');setTimeout(()=>e.remove(),500)};

@@ -448,6 +448,66 @@ def rir_is_picked_and_5plus_is_ignored_for_suggestions(app):
     eq(app.suggest("Squat"), before, "and suggestions ignore it, like a warm-up")
 
 
+def _sw_context(app):
+    """A browser profile with the service worker switched on (the other tests block it)."""
+    ctx = app.ctx.browser.new_context(viewport={"width": 390, "height": 844})
+    pg = ctx.new_page()
+    return ctx, pg, app.pg.url.rsplit("/", 1)[0] + "/"
+
+
+@test
+def offline_works_and_other_apps_caches_survive(app):
+    ctx, pg, base = _sw_context(app)
+    try:
+        pg.goto(base + "README.md")    # any page on the same origin, before Lift Log's worker exists
+        pg.evaluate("""async()=>{for(const n of ['nap-log-v3','cart-v6','rideguide-1','lift-log-old','liftlog-old'])await (await caches.open(n)).put('/x-'+n,new Response('x'))}""")
+        pg.goto(base + "index.html")
+        pg.evaluate("navigator.serviceWorker.ready")
+        if not pg.evaluate("!!navigator.serviceWorker.controller"):
+            pg.reload()
+        pg.wait_for_function("!!navigator.serviceWorker.controller", timeout=15000)
+        pg.wait_for_function("typeof S!=='undefined'&&document.querySelector('nav')", timeout=10000)
+        keys = pg.evaluate("caches.keys()")
+        cur = [k for k in keys if k.startswith("lift-log-") and k != "lift-log-old"]
+        eq(len(cur), 1, f"exactly one current Lift Log cache, got {keys}")
+        for other in ("nap-log-v3", "cart-v6", "rideguide-1"):
+            ok(other in keys, f"another app's cache {other} must survive, got {keys}")
+        for old in ("lift-log-old", "liftlog-old"):
+            ok(old not in keys, f"this app's old cache {old} should be cleaned up, got {keys}")
+        ok(pg.evaluate("navigator.serviceWorker.controller.scriptURL").endswith("/sw.js"), "Lift Log's worker controls the page")
+        ctx.set_offline(True)
+        pg.reload(); pg.wait_for_function("typeof S!=='undefined'&&document.querySelector('nav')", timeout=10000)
+        ok("Train" in pg.inner_text("nav"), "the app opens offline")
+        ok(pg.evaluate("[...document.fonts].some(f=>f.status=='loaded')"), "fonts come from the cache offline")
+    finally:
+        ctx.close()
+
+
+@test
+def storage_keys_are_prefixed_and_old_ones_move_over(app):
+    ctx = app.ctx.browser.new_context(service_workers="block"); pg = ctx.new_page()
+    base = app.pg.url.rsplit("/", 1)[0] + "/"
+    try:
+        pg.goto(base + "README.md")
+        pg.evaluate("""()=>{const L=localStorage;L.clear();
+          L.setItem('gh',JSON.stringify({repo:'Germani144/lift-log-data',token:'t0k'}));
+          L.setItem('w',JSON.stringify({sess:Date.now(),name:'Quick workout',rest:90,restEnd:0,items:[]}));
+          L.setItem('rest','150');L.setItem('bw','81');L.setItem('dirty','1');
+          L.setItem('cl_items','[]')}""")          # another app's key
+        pg.goto(base + "index.html"); pg.wait_for_function("typeof S!=='undefined'&&document.querySelector('nav')")
+        st = pg.evaluate("Object.fromEntries(Object.keys(localStorage).map(k=>[k,localStorage.getItem(k)]))")
+        eq(json.loads(st["lift-log:gh"])["token"], "t0k", "backup settings moved")
+        ok("lift-log:w" in st and pg.evaluate("!!W"), "workout in progress moved and still open")
+        eq((st.get("lift-log:rest"), st.get("lift-log:bw")), ("150", "81"), "rest default and bodyweight moved")
+        ok("gh" not in st and "w" not in st, "keys that are clearly Lift Log's are removed after moving")
+        eq(st.get("cl_items"), "[]", "another app's keys are untouched")
+        pg.evaluate("ls('rest',120)")
+        bad = [k for k in pg.evaluate("Object.keys(localStorage)") if not k.startswith("lift-log:") and k not in ("rest", "bw", "dirty", "cl_items")]
+        eq(bad, [], "Lift Log writes only prefixed keys")
+    finally:
+        ctx.close()
+
+
 @test
 def warmup_sets(app):
     app.new_exercise("Squat", lo=5, hi=8, wu=3)

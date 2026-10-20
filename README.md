@@ -43,9 +43,18 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
    ```
 4. Commit and push. GitHub runs the same checks on every push (Actions → Tests), and emails you if one fails.
 
+## Offline and shared storage
+
+All of the apps on germani144.github.io share one origin, so they share one CacheStorage and one localStorage. Lift Log keeps to its own:
+
+- **Service worker:** its cache is named `lift-log-<hash>` (the build sets the hash). On activate it only deletes its *own* old caches (`lift-log-…`, and the old `liftlog-…`), never another app's. It reads only from its own cache and only handles requests inside its scope (`/lift-log/`); the GitHub API for backups is never touched.
+- **Updates:** network first with `cache: 'no-cache'`, falling back to the cached copy offline, and registered with `updateViaCache: 'none'`, so a new deploy shows up the next time you open the app.
+- **localStorage:** every key starts with `lift-log:`. Older unprefixed keys are moved over once on first launch.
+- **IndexedDB:** your data lives in a database named `liftlog`, separate from other apps' databases.
+
 ## What the checks cover
 
-- **Security** (`tools/build.py --check`): strict Content-Security-Policy (no inline handlers, no `eval`, scripts only by hash, network only to the GitHub API for backups), and every file needed offline is precached.
-- **Behaviour** (`tests/run.py`): main workout flow, weight/rep suggestions (progression, warm-ups, bad-day guard, bodyweight), warm-up sets, backup round trip and rejection of bad files, names can't inject HTML/script, back gesture, search and ordering, swipe between tabs.
+- **Security** (`tools/build.py --check`): the service worker only touches its own caches and scope, localStorage keys are prefixed, strict Content-Security-Policy (no inline handlers, no `eval`, scripts only by hash, network only to the GitHub API for backups), and every file needed offline is precached.
+- **Behaviour** (`tests/run.py`): main workout flow, weight/rep suggestions (progression, warm-ups, bad-day guard, bodyweight), warm-up sets, backup round trip and rejection of bad files, names can't inject HTML/script, offline use and other apps' caches surviving, storage keys prefixed and migrated, back gesture, search and ordering, swipe between tabs.
 
 Fonts: Barlow and Barlow Condensed, SIL Open Font License (`fonts/OFL.txt`).

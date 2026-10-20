@@ -15,6 +15,8 @@ What it does
   4. Security checks: strict CSP (no unsafe-inline/unsafe-eval for scripts, nothing loaded from other
      sites except the GitHub API for backups), exactly one inline script, no inline event handlers
      or javascript: URLs, no eval/new Function, and every file the app needs offline is precached.
+     Shared origin: the service worker only deletes/reads its own prefixed caches and only handles its own
+     scope, and every localStorage key is prefixed (all apps on germani144.github.io share both).
 """
 import base64, hashlib, pathlib, re, subprocess, sys
 
@@ -90,6 +92,19 @@ def expected_version(html, sw):
     return cur if cur > hv else (hv[0], hv[1] + 1)
 
 
+def shared_origin_checks(html, js, sw):
+    """All apps share germani144.github.io: one CacheStorage, one localStorage. Don't touch other apps' data."""
+    if re.search(r"(?<![\w.])caches\.match\(", sw):
+        fail("sw.js: read from this app's own cache (caches.open(C).then(c=>c.match(...))), not the global caches.match()")
+    act = re.search(r"addEventListener\('activate'.*", sw)
+    if not act or "startsWith" not in act.group(0):
+        fail("sw.js: the activate handler may only delete caches whose name starts with this app's prefix")
+    if "self.registration.scope" not in sw:
+        fail("sw.js: only handle fetches inside self.registration.scope")
+    if re.search(r"localStorage\.(get|set|remove)Item\('", js):
+        fail("index.html: localStorage keys must be prefixed (use LSP + key, or ls()/lg())")
+
+
 def shell_files(sw):
     m = re.search(r"const SHELL=\[(.*?)\];", sw, re.S)
     if not m:
@@ -115,13 +130,14 @@ def main():
     h, js = script_hash(html_v)
     new_html = re.sub(r"script-src 'sha256-[^']+'", f"script-src '{h}'", html_v)
     security_checks(new_html, js)
+    shared_origin_checks(new_html, js, sw)
     files = shell_files(sw)
     digest = hashlib.sha256()
     for f in files:
         digest.update(f.encode())
         digest.update(new_html.encode() if f == "index.html" else (ROOT / f).read_bytes())
     digest.update(re.sub(r"const C='[^']*';", "", sw).encode())
-    version = "liftlog-" + digest.hexdigest()[:10]
+    version = "lift-log-" + digest.hexdigest()[:10]
     new_sw = re.sub(r"const C='[^']*';", f"const C='{version}';", sw)
     changed = [n for n, a, b in (("index.html", html, new_html), ("sw.js", sw, new_sw)) if a != b]
     if check:
