@@ -7,7 +7,7 @@
 
 Each test gets a fresh browser profile (empty IndexedDB). Exit code 0 = all passed.
 """
-import functools, http.server, json, pathlib, socket, subprocess, sys, threading, time, traceback
+import functools, http.server, json, pathlib, re, socket, subprocess, sys, threading, time, traceback
 from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -509,6 +509,33 @@ def storage_keys_are_prefixed_and_old_ones_move_over(app):
         eq(bad, [], "Lift Log writes only prefixed keys")
     finally:
         ctx.close()
+
+
+@test
+def check_for_updates(app):
+    """Exercises tab button: same version, newer version on the server (reload, only own caches cleared), offline."""
+    sw = (ROOT / "sw.js").read_text()
+    eq(re.search(r"const VER='([\d.]+)';", sw).group(1), app.js("VER"), "sw.js serves the same version as the app")
+    app.tab("Exercises")
+    app.click("[data-a=upd]"); app.pg.wait_for_function("!document.querySelector('#toast').hidden")
+    eq(app.pg.inner_text("#toast"), f"You're on the latest version (v{app.js('VER')}).", "up to date")
+    eq(app.dialogs, [], "no prompt when up to date")
+    app.js("Promise.all(['lift-log-old','liftlog-older','nap-log-abc'].map(k=>caches.open(k)))")
+    newer = re.sub(r"const VER='[\d.]+';", "const VER='99.0';", sw)
+    app.pg.route("**/sw.js?check=*", lambda r: r.fulfill(status=200, body=newer, content_type="text/javascript"))
+    app.js("window.__before=1")
+    with app.pg.expect_navigation():
+        app.click("[data-a=upd]")
+    app.pg.wait_for_function("typeof S!=='undefined'&&document.querySelector('nav')")
+    ok(app.dialogs and app.dialogs[-1].startswith("Version v99.0 is available"), "asks to update: " + str(app.dialogs[-1:]))
+    eq(app.js("window.__before"), None, "the app reloaded")
+    eq(sorted(app.js("caches.keys()")), ["nap-log-abc"], "only this app's caches are cleared")
+    app.pg.unroute("**/sw.js?check=*")
+    app.pg.route("**/sw.js?check=*", lambda r: r.abort())
+    app.tab("Exercises"); app.click("[data-a=upd]"); app.pg.wait_for_function("!document.querySelector('#toast').hidden")
+    ok(app.pg.inner_text("#toast").startswith("Couldn't reach the server"), "offline message")
+    eq(app.pg.inner_text("#updb"), "Check for updates", "button resets")
+    eq([e for e in app.errors if "ERR_FAILED" not in e], [], "no errors besides the simulated offline request")
 
 
 @test

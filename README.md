@@ -21,6 +21,7 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 - **Bodyweight lifts:** set your bodyweight on the Exercises tab and tick **Load includes bodyweight** on exercises like pull-ups and dips. For those, % of 1RM, estimated 1RM, suggestions and adjustments all use bodyweight + added weight, while you only type and see the added kg (1RM "+40" with 80 kg bodyweight = 120 kg; 80% = +16 kg). Bodyweight-only sets count toward strength, and each set remembers your bodyweight at the time. Bodyweight is included in backups.
 - **1RM and PB:** a set of 1 rep at 0 RIR counts as a tested 1RM; lifetime PB rises automatically.
 - **Plans:** days per week, number of weeks, and per-day exercises planned by RIR or % of 1RM (see above). Old text-style % plans (`3*80%x5`) are converted automatically. Progress shows as a barbell bar on the Train page.
+- **Check for updates:** button at the bottom of the Exercises tab. It asks the server which version it's serving (read from `sw.js`, which the build keeps equal to the app's `vX.Y`): "You're on the latest version", "Couldn't reach the server", or "Version vX.Y is available… Update now?", which refreshes the service worker, clears only Lift Log's own caches and reloads. Also a quick way to see whether GitHub Pages actually published a push.
 - **History:** month calendar of training days, every workout listed, and per-exercise charts (max weight and volume per session; touch, drag or hover to see each session's date and value). Tap **Edit workout** on any past workout to change its date or name, edit any set (weight, reps, RIR, warm-up), remove sets or exercises, or add sets and exercises. The workout in progress is edited from the Train tab instead.
 - **Exercises:** alphabetical list with a search box. Each exercise has its weight increment, warm-up sets, current 1RM and lifetime PB, plus the rep range and target RIR used for quick workouts (plans set their own).
 - **Navigation:** swipe left/right between tabs; the phone's back gesture closes the open page. The bottom bar is fixed and only the page above it scrolls; each tab opens at the top, and going back from an exercise returns you to the same place in the list.
@@ -42,6 +43,7 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
    python3 tests/run.py suggest    # just the tests with "suggest" in the name
    ```
 4. Commit and push. GitHub runs the same checks on every push (Actions → Tests), and emails you if one fails.
+5. Check it's live: open https://germani144-lift.github.io/lift-log/sw.js and look for the new `const VER`. If GitHub Pages didn't publish it, push again to re-trigger the build.
 
 ## Offline and shared storage
 
@@ -55,7 +57,7 @@ Lift Log has its own address (`germani144-lift.github.io`, a free GitHub organiz
 
 ## What the checks cover
 
-- **Security** (`tools/build.py --check`): the service worker only touches its own caches and scope, localStorage keys are prefixed, strict Content-Security-Policy (no inline handlers, no `eval`, scripts only by hash, network only to the GitHub API for backups), and every file needed offline is precached.
+- **Security** (`tools/build.py --check`): the service worker only touches its own caches and scope, localStorage keys are prefixed, strict Content-Security-Policy (no inline handlers, no `eval`, scripts only by hash, network only to this site (update check) and the GitHub API for backups), and every file needed offline is precached.
 - **Behaviour** (`tests/run.py`): main workout flow, weight/rep suggestions (progression, warm-ups, bad-day guard, bodyweight), warm-up sets, backup round trip and rejection of bad files, names can't inject HTML/script, offline use and other apps' caches surviving, storage keys prefixed and migrated, back gesture, search and ordering, swipe between tabs.
 
 Fonts: Barlow and Barlow Condensed, SIL Open Font License (`fonts/OFL.txt`).

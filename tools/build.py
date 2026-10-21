@@ -10,7 +10,8 @@ What it does
      If this hash is wrong the browser refuses to run the app and you get a blank screen.
   2. Bumps the app version (const VER='1.4' -> '1.5', shown in the app as v1.5) whenever the app
      differs from the last commit, so every update you push has its own number.
-  3. Sets the service-worker cache name to a hash of the app files, so phones always pick up a new
+  3. Copies that version into sw.js (const VER), which the app's "Check for updates" button reads
+     from the server. Sets the service-worker cache name to a hash of the app files, so phones always pick up a new
      version (no more manual "v23 -> v24" bumps).
   4. Security checks: strict CSP (no unsafe-inline/unsafe-eval for scripts, nothing loaded from other
      sites except the GitHub API for backups), exactly one inline script, no inline event handlers
@@ -46,8 +47,8 @@ def security_checks(html, js):
     src = csp.get("script-src", [])
     if len(src) != 1 or not src[0].startswith("'sha256-"):
         fail("CSP script-src must be exactly one sha256 hash (no 'unsafe-inline', no URLs)")
-    if csp.get("connect-src") != ["https://api.github.com"]:
-        fail("CSP connect-src must only allow https://api.github.com (backups)")
+    if csp.get("connect-src") != ["'self'", "https://api.github.com"]:
+        fail("CSP connect-src must only allow 'self' (update check) and https://api.github.com (backups)")
     for k in ("base-uri", "form-action"):
         if csp.get(k) != ["'none'"]:
             fail(f"CSP {k} must be 'none'")
@@ -153,6 +154,9 @@ def main():
     digest.update(re.sub(r"const C='[^']*';", "", sw).encode())
     version = "lift-log-" + digest.hexdigest()[:10]
     new_sw = re.sub(r"const C='[^']*';", f"const C='{version}';", sw)
+    if len(VER_RE.findall(new_sw)) != 1:
+        fail("sw.js must contain exactly one  const VER='X.Y';  (read by Check for updates)")
+    new_sw = VER_RE.sub(f"const VER='{v[0]}.{v[1]}';", new_sw)   # server-side version = the app's version
     changed = [n for n, a, b in (("index.html", html, new_html), ("sw.js", sw, new_sw)) if a != b]
     if check:
         if changed:

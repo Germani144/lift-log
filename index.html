@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kaGPLzAnNRn8bd0Y283OaLITEA9+4ZppKboj+dD/Bko='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-PI+fl5+xqPib/BzryTRynyV9VkQIz5zNs3yG4OzaIAs='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -157,7 +157,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const bb=(n,done,cur,label)=>`<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({length:n},(_,i)=>`<i${i<done?' class=d':cur&&i==done?' class=n':''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NI={train:'<svg viewBox="0 0 24 24"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',hist:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',tpl:'<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',ex:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>'};
 const scTo=(x,y)=>{const m=$('main');if(m)m.scrollTop=y},scY=()=>$('main')?.scrollTop||0;   // the page scrolls inside <main>, not the window
-const VER='2.7';   // app version, bumped automatically by tools/build.py on every change
+const VER='2.8';   // app version, bumped automatically by tools/build.py on every change
 /* All of Germani144's apps share this origin's localStorage, so every Lift Log key starts with "lift-log:".
    Old unprefixed keys are moved once. Keys whose content proves they're Lift Log's (workout in progress, backup
    settings) are removed afterwards; generic ones (rest, bw, lb, dirty) are copied only if they look valid, and
@@ -423,7 +423,7 @@ function rEx(){return`<h2>Exercises</h2>`+
  ${ghCard()}
  <div class=card><b>Manual backup</b><div class=m>${lastBackup()?'Last backup '+age(lastBackup()):'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
  <div class=row><button class=b data-a=backup>Export</button><button class=b data-a=restore>Import</button></div><input type=file id=imp accept=".json,application/json" hidden></div>
- <p class="m ver">Lift Log v${VER}</p>`}
+ <p class="m ver">Lift Log v${VER}</p><button class=b style="width:100%;margin-top:8px" data-a=upd id=updb>Check for updates</button>`}
 
 function sessions(sets){const g={};sets.forEach(s=>(g[s.sess]??=[]).push(s));
  return Object.keys(g).map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),es=ss.filter(s=>s.rir!=null&&!s.test).map(s=>e1(s.w,s.r,s.rir));
@@ -620,6 +620,18 @@ async function loadEx(id){S.prl=(await all('pr_history','ex',id)).sort((a,b)=>b.
 const back=()=>{S.view=null;E=null;render()};
 
 const A={
+ upd:async()=>{const b=$('#updb');   // ask the server which version it serves (sw.js carries the same VER); update on demand
+  b.textContent='Checking…';b.disabled=true;let v=null;
+  try{const r=await fetch('sw.js?check='+Date.now(),{cache:'no-store'});if(r.ok)v=(/const VER='(\d+\.\d+)';/.exec(await r.text())||[])[1]||null}catch{}
+  b.textContent='Check for updates';b.disabled=false;
+  if(!v)return toast('Couldn\'t reach the server. Check the connection and try again.');
+  const n=x=>x.split('.').map(Number),[a1,a2]=n(v),[c1,c2]=n(VER);
+  if(a1<c1||a1==c1&&a2<=c2)return toast(`You're on the latest version (v${VER}).`);
+  if(!confirm(`Version v${v} is available (you have v${VER}). Update now?`))return;
+  b.textContent='Updating…';b.disabled=true;
+  try{const g=await navigator.serviceWorker?.getRegistration();if(g)await g.update()}catch{}
+  try{for(const k of await caches.keys())if(k.startsWith('lift-log-')||k.startsWith('liftlog-'))await caches.delete(k)}catch{}   // only this app's caches
+  location.reload()},
  backup:()=>exportData(),
  restore:()=>$('#imp').click(),
  tab:async(s,d)=>{PICK=null;S.tab=d.i;S.view=null;E=null;await load();render();scTo(0,0)},
