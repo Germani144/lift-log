@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-PI+fl5+xqPib/BzryTRynyV9VkQIz5zNs3yG4OzaIAs='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-R8LLpTUzImH8+sVKtpn2MVnqqoubbCSdMFiHhns/o4I='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -23,6 +23,11 @@ html,body{margin:0;height:100%;overflow:hidden;touch-action:pan-y}
 body{background:var(--bg);color:var(--fg);font:400 16px/1.4 Bw,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent}
 #app{padding-top:env(safe-area-inset-top)}
 main{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px max(14px,calc(50% - 266px)) 110px;touch-action:pan-y}
+
+.cog{width:44px;height:44px;flex:none;border:0;background:transparent;border-radius:12px;color:var(--m);cursor:pointer;display:grid;place-items:center;margin:-6px -8px 0 0}
+.cog svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.cog:active{background:var(--c2)}
+.body2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.body2 .row{margin:0}.body2 .m{flex:0 0 auto}
+.bmi{margin-top:10px}
 h2{margin:6px 0 14px;font:700 32px/1 BC,system-ui,sans-serif;letter-spacing:.2px}
 .hd h2{margin:0}
 main>.hd{margin-bottom:10px}
@@ -157,7 +162,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const bb=(n,done,cur,label)=>`<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({length:n},(_,i)=>`<i${i<done?' class=d':cur&&i==done?' class=n':''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NI={train:'<svg viewBox="0 0 24 24"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',hist:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',tpl:'<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',ex:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>'};
 const scTo=(x,y)=>{const m=$('main');if(m)m.scrollTop=y},scY=()=>$('main')?.scrollTop||0;   // the page scrolls inside <main>, not the window
-const VER='2.8';   // app version, bumped automatically by tools/build.py on every change
+const VER='2.9';   // app version, bumped automatically by tools/build.py on every change
 /* All of Germani144's apps share this origin's localStorage, so every Lift Log key starts with "lift-log:".
    Old unprefixed keys are moved once. Keys whose content proves they're Lift Log's (workout in progress, backup
    settings) are removed afterwards; generic ones (rest, bw, lb, dirty) are copied only if they look valid, and
@@ -165,7 +170,7 @@ const VER='2.8';   // app version, bumped automatically by tools/build.py on eve
 const LSP='lift-log:';
 (()=>{try{const L=localStorage,J=v=>{try{return JSON.parse(v)}catch{return null}},num=(a,b)=>v=>+v>=a&&+v<=b;
  const sure={w:v=>{const o=J(v);return!!(o&&Array.isArray(o.items)&&o.sess>0)},gh:v=>{const o=J(v);return!!(o&&o.token&&/lift-log/i.test(o.repo||''))},gherr:v=>/^Last automatic backup failed/.test(v)},
-  looks={rest:num(15,1800),bw:num(20,400),lb:num(1.5e12,4e12),dirty:v=>v=='0'||v=='1'};
+  looks={rest:num(15,1800),bw:num(20,400),ht:num(100,250),lb:num(1.5e12,4e12),dirty:v=>v=='0'||v=='1'};
  for(const k of [...Object.keys(sure),...Object.keys(looks)]){const v=L.getItem(k);if(v==null||L.getItem(LSP+k)!=null)continue;
   if(sure[k]){if(sure[k](v)){L.setItem(LSP+k,v);L.removeItem(k)}}else if(looks[k](v))L.setItem(LSP+k,v)}}catch{}})();
 const fmt=x=>x===''||x==null||isNaN(x)?'':+(+x).toFixed(2);
@@ -211,7 +216,7 @@ async function load(){
 function linesFromText(t){const out=[];for(const l of String(t||'').split('\n')){const m=l.trim().match(/^(?:(\d+)\s*[*×]\s*)?(\d+(?:\.\d+)?)%\s*x\s*(\d+)$/i);if(m)out.push({n:+(m[1]||1),p:+m[2],r:+m[3]})}return out}
 /* Bodyweight lifts (pull-ups, dips…): with "Load includes bodyweight" on, the maths uses you + the plate,
    while you always type and see only the added kg. Each logged set remembers your bodyweight at the time. */
-const BWv=()=>+lg('bw')||0,bwo=ex=>ex?.bwl?BWv():0;
+const BWv=()=>+lg('bw')||0,HTv=()=>+lg('ht')||0,bwo=ex=>ex?.bwl?BWv():0;
 const tot=(ex,s)=>ex?.bwl?{...s,w:(s.w===''||s.w==null?0:+s.w)+(s.bw??BWv())}:s;   // a set in total-load space
 const outW=(ex,v)=>{if(ex?.bwl){const a=rnd(+v-BWv(),ex.inc);return a>0?a:''}return v>0?rnd(v,ex.inc):''};   // total load -> what you load ('' = bodyweight / no suggestion)
 /* RIR is picked from a list: 0–5 in half steps, plus "5+" (stored as 6). A 5+ set stays in history and volume
@@ -407,7 +412,7 @@ function rPick(){const old=PICK.t=='rep'?EX(W.items[PICK.i]?.exId):null;
 function rTrain(){
  if(!W||LAND){const ps=[...S.tpl.filter(t=>t.active),...S.tpl.filter(t=>!t.active)],
    cur=W?`<div class=card><div class=hd><b>Workout in progress</b><span class=m>${W.items.reduce((n,i)=>n+i.rows.filter(x=>x.done).length,0)} sets logged</span></div><div class=m>${esc(W.name)}</div><div class=row><button class="b p" data-a=resume>Resume</button><button class=b data-a=finish>Finish</button></div></div>`:'';
-  return`<h2>Train</h2>`+cur+nag()+(ps.map(rPlan).join('')||'<p class=m>No plans yet. Build one in Plans, or start a quick workout.</p>')+`<button class=b data-a=start>Quick workout</button>`}
+  return ttl('Train')+cur+nag()+(ps.map(rPlan).join('')||'<p class=m>No plans yet. Build one in Plans, or start a quick workout.</p>')+`<button class=b data-a=start>Quick workout</button>`}
  if(!W.rest)W.rest=+lg('rest')||120;
  if(PICK)return rPick();
  return`<button class=b data-a=toLanding>‹ Back</button><div class=hd><h2>${esc(W.name)}</h2><button class="b p" data-a=finish>Finish</button></div>`+prog()+W.items.map(card).join('')+
@@ -415,15 +420,25 @@ function rTrain(){
 
 let EQ='';   // Exercises tab search text
 const exHit=n=>{n=n.toLowerCase();return EQ.toLowerCase().split(/\s+/).filter(Boolean).every(w=>n.includes(w))};
-function rEx(){return`<h2>Exercises</h2>`+
- (S.ex.length?`<input id=exq type=search placeholder="Search exercises" value="${esc(EQ)}" autocomplete=off enterkeyhint=search>`:'')+(!S.ex.length&&!S.sets.length&&!ghCfg()?`<div class=card><b>No data here</b><div class=m>If you had a backup, restore it first: enter your token in Automatic backup below and tap Turn on. Don't add anything before restoring.</div></div>`:'')+sortedEx().map(e=>{const p=S.pr[e.id];
- return`<button class="b big exr" data-a=exOpen data-i=${e.id} data-q="${esc(e.name.toLowerCase())}"${exHit(e.name)?'':' hidden'}><span class=l>${esc(e.name)}<small>${e.inc>0?'increment '+e.inc:'bodyweight'}</small></span>${p?`<span class=r><b>${e.bwl?'+':''}${fmt(p.w)}<i> kg</i></b><small>1RM ${age(p.t)}${e.pb?' · PB '+fmt(e.pb):''}</small></span>`:e.pb?`<span class=r><small>PB ${fmt(e.pb)}</small></span>`:e.mode=='pct'?'<span class=r><small>No 1RM</small></span>':''}</button>`}).join('')+`<p class=m id=exnone${!S.ex.length||S.ex.some(e=>exHit(e.name))?' hidden':''}>No exercise matches “${esc(EQ)}”.</p><button class="b p" data-a=exNew>New exercise</button>
- <div class=card><b>Your bodyweight</b><div class=m>Used for exercises where the load includes bodyweight. Update it whenever it changes; logged sets keep the weight you had then.</div>
- <div class=row style="margin-top:8px"><input id=bwi type=number step=any inputmode=decimal placeholder="kg" aria-label="Bodyweight in kg" value="${BWv()||''}"><span class=m style="flex:0 0 auto">kg</span></div></div>
+function rEx(){return ttl('Exercises')+
+ (S.ex.length?`<input id=exq type=search placeholder="Search exercises" value="${esc(EQ)}" autocomplete=off enterkeyhint=search>`:'')+(!S.ex.length&&!S.sets.length&&!ghCfg()?`<div class=card><b>No data here</b><div class=m>If you had a backup, restore it first: tap ⚙ (top right), enter your token in Automatic backup and tap Turn on. Don't add anything before restoring.</div></div>`:'')+sortedEx().map(e=>{const p=S.pr[e.id];
+ return`<button class="b big exr" data-a=exOpen data-i=${e.id} data-q="${esc(e.name.toLowerCase())}"${exHit(e.name)?'':' hidden'}><span class=l>${esc(e.name)}<small>${e.inc>0?'increment '+e.inc:'bodyweight'}</small></span>${p?`<span class=r><b>${e.bwl?'+':''}${fmt(p.w)}<i> kg</i></b><small>1RM ${age(p.t)}${e.pb?' · PB '+fmt(e.pb):''}</small></span>`:e.pb?`<span class=r><small>PB ${fmt(e.pb)}</small></span>`:e.mode=='pct'?'<span class=r><small>No 1RM</small></span>':''}</button>`}).join('')+`<p class=m id=exnone${!S.ex.length||S.ex.some(e=>exHit(e.name))?' hidden':''}>No exercise matches “${esc(EQ)}”.</p><button class="b p" data-a=exNew>New exercise</button>`}
+
+const COG='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+const ttl=t=>`<div class=hd><h2>${t}</h2><button class=cog data-a=settings aria-label="Settings">${COG}</button></div>`;   // every tab's title row, with the settings cog
+// BMI = kg / m². Categories are the WHO adult ranges; they don't account for muscle mass.
+const bmi=()=>{const w=BWv(),h=HTv()/100;return w>0&&h>0?Math.round(w/(h*h)*10)/10:null};
+const bmiTxt=()=>{const b=bmi();if(b==null)return'<span class=m>Enter weight and height to see your BMI.</span>';
+ return`BMI <b>${b.toFixed(1)}</b> <span class=m>· ${b<18.5?'underweight':b<25?'normal range':b<30?'overweight range':'obese range'} (WHO ranges; muscle counts as weight)</span>`};
+function rSet(){return`<button class=b data-a=back>‹ Back</button><h2 style="margin-top:12px">Settings</h2>
+ <div class=card><b>You</b><div class=m>Bodyweight is used for exercises where the load includes bodyweight. Update it whenever it changes; logged sets keep the weight you had then.</div>
+ <div class=body2><label>Weight<span class=row><input id=bwi type=number step=any inputmode=decimal placeholder="kg" aria-label="Bodyweight in kg" value="${BWv()||''}"><span class=m>kg</span></span></label>
+ <label>Height<span class=row><input id=hti type=number step=any inputmode=decimal placeholder="cm" aria-label="Height in cm" value="${HTv()||''}"><span class=m>cm</span></span></label></div>
+ <div class=bmi id=bmi>${bmiTxt()}</div></div>
  ${ghCard()}
  <div class=card><b>Manual backup</b><div class=m>${lastBackup()?'Last backup '+age(lastBackup()):'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
  <div class=row><button class=b data-a=backup>Export</button><button class=b data-a=restore>Import</button></div><input type=file id=imp accept=".json,application/json" hidden></div>
- <p class="m ver">Lift Log v${VER}</p><button class=b style="width:100%;margin-top:8px" data-a=upd id=updb>Check for updates</button>`}
+ <div class=card><b>App</b><div class=m>Lift Log <span id=verl>v${VER}</span></div><button class=b style="width:100%;margin-top:8px" data-a=upd id=updb>Check for updates</button></div>`}
 
 function sessions(sets){const g={};sets.forEach(s=>(g[s.sess]??=[]).push(s));
  return Object.keys(g).map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),es=ss.filter(s=>s.rir!=null&&!s.test).map(s=>e1(s.w,s.r,s.rir));
@@ -494,12 +509,12 @@ function rDay(g){if(!CAL.sel)return'<p class=m>Tap a highlighted day to see its 
 
 function rHist(){const g={};S.sets.forEach(s=>(g[s.sess]??=[]).push(s));
  const ks=Object.keys(g).sort((a,b)=>b-a);
- return`<h2>History</h2>`+rCal(g)+`<h2 style="margin-top:22px">All workouts</h2>`+(ks.map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),ids=[...new Set(ss.map(s=>s.exId))];
+ return ttl('History')+rCal(g)+`<h2 style="margin-top:22px">All workouts</h2>`+(ks.map(k=>{const ss=g[k].sort((a,b)=>a.t-b.t),ids=[...new Set(ss.map(s=>s.exId))];
   return`<div class=card><div class=hd><b>${esc(ss[0].wn||'Workout')}</b><span class=m>${dstr(+k)} · ${vol(ss)} reps</span></div>`+
   ids.map(id=>{const xs=ss.filter(s=>s.exId==id);return`<div class=hl style="display:block"><div class=hd><b>${esc(EX(id)?.name||'Deleted exercise')}</b><span class=m>${vol(xs)} reps</span></div><div class=m>${xs.map(s=>`${wt(s.w)}×${s.r}${s.rir!=null?' @'+rirTxt(s.rir):''}${s.test?' ★':''}`).join(' · ')}</div></div>`}).join('')+
   `<div class=row>${W&&W.sess==k?'':`<button class=b data-a=wedOpen data-i=${k}>Edit workout</button>`}<button class=b data-a=wdel data-i=${k}>Delete workout</button></div></div>`}).join('')||'<p class=m>No workouts logged yet. Sets appear here as soon as you tap ✓.</p>')}
 
-function rTpl(){return`<h2>Plans</h2>`+S.tpl.map(t=>`<button class="b big" data-a=tplEdit data-i=${t.id}>${esc(t.name)}<small>${t.days.length} day${t.days.length>1?'s':''}/week · ${t.weeks} weeks${t.active?' · active':''} · ${t.days.map(d=>esc(d.name)).join(', ')}</small></button>`).join('')+`<button class="b p" data-a=tplNew>New weekly plan</button>`}
+function rTpl(){return ttl('Plans')+S.tpl.map(t=>`<button class="b big" data-a=tplEdit data-i=${t.id}>${esc(t.name)}<small>${t.days.length} day${t.days.length>1?'s':''}/week · ${t.weeks} weeks${t.active?' · active':''} · ${t.days.map(d=>esc(d.name)).join(', ')}</small></button>`).join('')+`<button class="b p" data-a=tplNew>New weekly plan</button>`}
 
 function resizeDays(n){const d=E.days;
  if(n<d.length&&d.slice(n).some(x=>x.items.length)&&!confirm('Remove the extra days and their exercises?')){render();return}
@@ -565,7 +580,7 @@ async function wedSave(){
  WE=null;S.view=null;if(CAL)CAL.sel=dk(ns);await load();render();toast('Workout saved')}
 
 function render(){
- const v=S.view?.t,body=v=='exd'?rExd():v=='tple'?rTple():v=='wed'?rWed():{train:rTrain,hist:rHist,tpl:rTpl,ex:rEx}[S.tab]();
+ const v=S.view?.t,body=v=='exd'?rExd():v=='tple'?rTple():v=='wed'?rWed():v=='set'?rSet():{train:rTrain,hist:rHist,tpl:rTpl,ex:rEx}[S.tab]();
  let m=$('main',app),nav=$('nav',app);
  if(!m||!nav){app.innerHTML=`<main></main><nav>${[['train','Train'],['hist','History'],['tpl','Plans'],['ex','Exercises']].map(([k,l])=>`<button data-a=tab data-i=${k}>${NI[k]}${l}</button>`).join('')}</nav>`;m=$('main',app);nav=$('nav',app)}
  m.removeAttribute('style');m.className='';
@@ -581,7 +596,8 @@ const setPath=(o,p,v)=>{const k=p.split('.'),l=k.pop();k.forEach(x=>o=o[x]);o[l]
 app.addEventListener('input',e=>{const t=e.target,s=t.closest('.set');
  if(WE&&S.view?.t=='wed'){if(t.dataset.wf!=null){const e=t.closest('.eset');WE.items[e.dataset.k].rows[e.dataset.j][t.dataset.wf]=t.value===''?'':+t.value;if(t.tagName=='SELECT')t.classList.toggle('ph',t.value==='');return}
   if(t.dataset.wn!=null){WE.wn=t.value;return}if(t.dataset.wd!=null){WE.date=t.value;return}if(t.id=='wq'){WQ=t.value;$('#wqs').innerHTML=wqBox();return}}
- if(t.id=='bwi'){const v=+t.value;if(t.value===''){ls('bw','');touch()}else if(v>=20&&v<=400){ls('bw',v);touch()}return}
+ if(t.id=='bwi'){const v=+t.value;if(t.value===''){ls('bw','');touch()}else if(v>=20&&v<=400){ls('bw',v);touch()}$('#bmi').innerHTML=bmiTxt();return}
+ if(t.id=='hti'){const v=+t.value;if(t.value===''){ls('ht','');touch()}else if(v>=100&&v<=250){ls('ht',v);touch()}$('#bmi').innerHTML=bmiTxt();return}
  if(t.id=='exq'){EQ=t.value;let any=false;document.querySelectorAll('.exr').forEach(b=>{const h=exHit(b.dataset.q);b.hidden=!h;any||=h});$('#exnone').hidden=any;return}
  if(t.id=='pq'){PQ=t.value;$('#plist').innerHTML=pickBox();return}
  if(t.dataset.tr!=null&&TR){TR.q=t.value;$('#trs').innerHTML=trBox();return}
@@ -708,6 +724,7 @@ const A={
   if(r.done&&r.id){const x=await rq(st('sets').get(r.id));if(x){if(r.wu){x.wu=true;x.test=false}else{delete x.wu;x.test=isTest(x)}await put('sets',x)}}
   saveW();render()},
  undo:async s=>{const r=W.items[s.dataset.i].rows[s.dataset.j];if(r.id)await del('sets',r.id);r.done=false;delete r.id;saveW();render()},
+ settings:()=>{PICK=null;S.view={t:'set'};render()},
  exNew:()=>{E={name:'',mode:'rir',inc:2,lo:8,hi:12,rir:2};S.prl=[];S.hist=[];S.view={t:'exd'};render()},
  exOpen:async(s,d)=>{E=structuredClone(EX(+d.i));S.view={t:'exd'};await loadEx(E.id)},
  exSave:async()=>{if(!E.name.trim())return toast('Name required');E.inc=+E.inc||0;if(E.inc<0)return toast('Increment can\'t be negative');
@@ -761,7 +778,7 @@ const A={
 
 /* ---------- backup ---------- */
 const STORES=['exercises','templates','pr_history','sets'];
-async function exportData(){const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await all(n);d.bw=BWv()||undefined;
+async function exportData(){const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await all(n);d.bw=BWv()||undefined;d.ht=HTv()||undefined;
  const name=`liftlog-${new Date().toISOString().slice(0,10)}.json`,f=new File([JSON.stringify(d)],name,{type:'application/json'});
  try{if(navigator.canShare?.({files:[f]}))await navigator.share({files:[f]});else throw 0}
  catch(e){if(e&&e.name=='AbortError')return;const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=name;a.click()}
@@ -772,7 +789,7 @@ function clean(d){
   opt=x=>typeof x=='number'&&isFinite(x)?x:undefined,
   str=(x,k)=>{if(typeof x!='string'||x.length>200)throw new Error('bad '+k);return x},
   arr=(o,n,max=2e5)=>{if(!Array.isArray(o[n])||o[n].length>max)throw new Error('bad '+n);return o[n]};
- return{t:opt(d.t)??Date.now(),bw:opt(d.bw),
+ return{t:opt(d.t)??Date.now(),bw:opt(d.bw),ht:opt(d.ht),
   exercises:arr(d,'exercises').map(e=>{if(!['rir','pct'].includes(e.mode))throw new Error('bad mode');
    return{id:num(e.id,'id'),name:str(e.name,'name'),mode:e.mode,inc:num(e.inc,'inc'),lo:opt(e.lo),hi:opt(e.hi),rir:opt(e.rir),pb:opt(e.pb),wu:opt(e.wu),bwl:e.bwl===true?true:undefined}}),
   templates:arr(d,'templates').map(t=>({id:num(t.id,'id'),name:str(t.name,'name'),weeks:opt(t.weeks),active:t.active===true,runStart:opt(t.runStart),days:arr(Array.isArray(t.days)?t:{days:[{name:'Day 1',items:t.items}]},'days',14).map(y=>({name:str(y.name,'name'),items:arr(y,'items',200).map(i=>({exId:num(i.exId,'exId'),n:opt(i.n),lo:opt(i.lo),hi:opt(i.hi),rir:opt(i.rir),mode:i.mode=='pct'?'pct':i.mode=='rir'?'rir':undefined,
@@ -786,7 +803,7 @@ async function applyBackup(d){
  try{d=clean(d)}catch(e){toast('Backup file is invalid ('+e.message+'). Nothing was changed.');return false}
  if(!confirm(`Replace ALL current data with the backup from ${dstr(d.t)}? (${d.sets.length} sets, ${d.exercises.length} exercises)`))return false;
  for(const n of STORES){await rq(st(n,'readwrite').clear());for(const o of d[n])await put(n,o)}
- if(d.bw>0)ls('bw',d.bw);
+ if(d.bw>0)ls('bw',d.bw);if(d.ht>=100&&d.ht<=250)ls('ht',d.ht);
  W=null;saveW();S.view=null;E=null;await load();render();toast('Backup restored');return true}
 
 /* ---------- automatic backup to a private GitHub repo ---------- */
@@ -800,7 +817,7 @@ let pq=Promise.resolve();
 const ghPush=g=>pq=pq.catch(()=>{}).then(async()=>{try{return await ghPush1(g)}catch(e){if(/ 409| 422/.test(e.message))return await ghPush1(g);throw e}});
 async function ghPush1(g){let sha;const r0=await fetch(ghUrl(g),{headers:ghH(g),cache:'no-store'});
  if(r0.ok)sha=(await r0.json()).sha;else if(r0.status!=404)throw new Error('GitHub error '+r0.status);
- const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await all(n);d.bw=BWv()||undefined;
+ const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await all(n);d.bw=BWv()||undefined;d.ht=HTv()||undefined;
  const r=await fetch(ghUrl(g),{method:'PUT',cache:'no-store',headers:ghH(g),body:JSON.stringify({message:'Lift Log backup',content:btoa(unescape(encodeURIComponent(JSON.stringify(d)))),sha})});
  if(!r.ok)throw new Error('GitHub error '+r.status+(r.status==422?' (stale file version, try again)':''));
  ls('lb',Date.now());ls('dirty','0');ls('gherr','')}
@@ -808,7 +825,7 @@ async function ghPull(g){const r=await fetch(ghUrl(g),{headers:ghH(g,'applicatio
  if(r.status==404)return null;if(!r.ok)throw new Error('GitHub error '+r.status);return JSON.parse(await r.text())}
 async function autoBackup(){const g=ghCfg();if(!g||!navigator.onLine||(!S.ex.length&&!S.sets.length))return;
  try{await ghPush(g)}catch(e){ls('gherr','Last automatic backup failed: '+e.message)}
- if(S.tab=='ex'&&!S.view)render()}
+ if(S.view?.t=='set')render()}
 const DEFREPO='Germani144/lift-log-data';
 function ghCard(){const g=ghCfg(),lb=lastBackup(),er=lg('gherr');
  return`<div class=card><b>Automatic backup (GitHub)</b>`+(g?

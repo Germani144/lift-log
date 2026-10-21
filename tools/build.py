@@ -151,7 +151,7 @@ def main():
     for f in files:
         digest.update(f.encode())
         digest.update(new_html.encode() if f == "index.html" else (ROOT / f).read_bytes())
-    digest.update(re.sub(r"const C='[^']*';", "", sw).encode())
+    digest.update(VER_RE.sub("", re.sub(r"const C='[^']*';", "", sw)).encode())   # the version is already in index.html
     version = "lift-log-" + digest.hexdigest()[:10]
     new_sw = re.sub(r"const C='[^']*';", f"const C='{version}';", sw)
     if len(VER_RE.findall(new_sw)) != 1:

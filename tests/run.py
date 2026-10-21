@@ -62,6 +62,9 @@ class App:
     def tab(self, name):
         self.click(f'nav button:has-text("{name}")')
 
+    def settings(self):
+        self.tab("Exercises"); self.click("[data-a=settings]")
+
     def state(self):
         return self.js("({tab:S.tab,ex:S.ex.length,tpl:S.tpl.length,sets:S.sets.length,w:!!W,"
                        "rows:W?W.items.map(i=>i.rows.length+':'+i.rows.filter(r=>r.done).length).join(','):'',"
@@ -121,8 +124,8 @@ def version_is_shown(app):
     v = app.js("VER")
     ok(__import__("re").fullmatch(r"\d+\.\d+", v), f"VER should look like 1.4, got {v!r}")
     eq(app.js("document.getElementById('sver')?.textContent"), "v" + v, "splash shows the version")
-    app.tab("Exercises")
-    ok(f"Lift Log v{v}" in app.pg.inner_text("main"), "Exercises tab shows the version")
+    app.settings()
+    ok(f"Lift Log v{v}" in app.pg.inner_text("main"), "Settings shows the version")
 
 
 @test
@@ -404,7 +407,7 @@ def chart_shows_date_and_value_on_touch(app):
 
 @test
 def bodyweight_lifts_use_total_load(app):
-    app.tab("Exercises"); app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
+    app.settings(); app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
     eq(app.js("BWv()"), 80, "bodyweight saved")
     app.new_exercise("Pull-ups", inc=2, lo=6, hi=10, cur=40)          # 1RM is +40 kg
     app.click("[data-a=exOpen]"); app.click("input[data-b=bwl]"); app.click("[data-a=exSave]")
@@ -423,7 +426,7 @@ def bodyweight_lifts_use_total_load(app):
 
 @test
 def bodyweight_sets_count_toward_strength(app):
-    app.tab("Exercises"); app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
+    app.settings(); app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
     app.new_exercise("Dips", inc=2, lo=6, hi=10)
     app.js("(async()=>{const e=S.ex[0];e.bwl=true;await put('exercises',e);await load()})()")
     app.seed_sets("Dips", [[(0, 10, 2)] * 3] * 2)                     # 10 bodyweight dips @ 2 RIR, twice
@@ -512,11 +515,37 @@ def storage_keys_are_prefixed_and_old_ones_move_over(app):
 
 
 @test
+def settings_page_body_and_bmi(app):
+    """⚙ on every tab opens Settings (bodyweight, height, BMI, backups, version); hidden during a workout."""
+    for t in ("Train", "History", "Plans", "Exercises"):
+        app.tab(t); eq(app.pg.locator("[data-a=settings]").count(), 1, f"cog on {t}")
+    ok("#bwi" and app.pg.locator("#bwi").count() == 0, "bodyweight is no longer on the Exercises tab")
+    app.click("[data-a=settings]")
+    txt = app.pg.inner_text("main")
+    for w in ("Settings", "Automatic backup", "Manual backup", "Check for updates"):
+        ok(w in txt, f"Settings shows {w}")
+    ok("Enter weight and height" in app.pg.inner_text("#bmi"), "no BMI without height")
+    app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
+    app.fill("#hti", 180); app.pg.locator("#hti").dispatch_event("input")
+    ok(app.pg.inner_text("#bmi").startswith("BMI 24.7"), "BMI = 80 / 1.8² = 24.7: " + app.pg.inner_text("#bmi"))
+    eq((app.js("localStorage.getItem('lift-log:ht')"), app.js("HTv()")), ("180", 180), "height saved, prefixed")
+    app.fill("#hti", 30); app.pg.locator("#hti").dispatch_event("input")
+    eq(app.js("HTv()"), 180, "implausible height ignored")
+    app.click("[data-a=back]"); ok(app.pg.locator("#bwi").count() == 0 and app.js("S.view") is None, "Back leaves Settings")
+    app.settings(); app.pg.go_back(); app.pg.wait_for_timeout(200); eq(app.js("S.view"), None, "back gesture leaves Settings")
+    d = app.js("(async()=>{const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await all(n);d.bw=BWv();d.ht=HTv();return clean(d)})()")
+    eq((d["bw"], d["ht"]), (80, 180), "backups carry bodyweight and height")
+    app.tab("Train"); app.click("[data-a=start]")
+    eq(app.pg.locator("[data-a=settings]").count(), 0, "no cog during a workout (Finish sits there)")
+    eq(app.errors, [])
+
+
+@test
 def check_for_updates(app):
-    """Exercises tab button: same version, newer version on the server (reload, only own caches cleared), offline."""
+    """Settings button: same version, newer version on the server (reload, only own caches cleared), offline."""
     sw = (ROOT / "sw.js").read_text()
     eq(re.search(r"const VER='([\d.]+)';", sw).group(1), app.js("VER"), "sw.js serves the same version as the app")
-    app.tab("Exercises")
+    app.settings()
     app.click("[data-a=upd]"); app.pg.wait_for_function("!document.querySelector('#toast').hidden")
     eq(app.pg.inner_text("#toast"), f"You're on the latest version (v{app.js('VER')}).", "up to date")
     eq(app.dialogs, [], "no prompt when up to date")
@@ -532,7 +561,7 @@ def check_for_updates(app):
     eq(sorted(app.js("caches.keys()")), ["nap-log-abc"], "only this app's caches are cleared")
     app.pg.unroute("**/sw.js?check=*")
     app.pg.route("**/sw.js?check=*", lambda r: r.abort())
-    app.tab("Exercises"); app.click("[data-a=upd]"); app.pg.wait_for_function("!document.querySelector('#toast').hidden")
+    app.settings(); app.click("[data-a=upd]"); app.pg.wait_for_function("!document.querySelector('#toast').hidden")
     ok(app.pg.inner_text("#toast").startswith("Couldn't reach the server"), "offline message")
     eq(app.pg.inner_text("#updb"), "Check for updates", "button resets")
     eq([e for e in app.errors if "ERR_FAILED" not in e], [], "no errors besides the simulated offline request")
