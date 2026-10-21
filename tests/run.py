@@ -144,6 +144,9 @@ def main_flow(app):
     eq(app.state()["rows"], "3:0,3:0")
     row = '.set[data-j="0"] >> nth=0 >> '
     app.fill(row + "input[data-f=w]", 40); app.fill(row + "input[data-f=r]", 10); app.fill(row + "[data-f=rir]", 2)
+    app.click(row + "[data-a=step][data-d='1']"); app.click(row + "[data-a=step][data-d='1']"); app.click(row + "[data-a=step][data-d='-1']")
+    eq((app.pg.input_value(row + "input[data-f=r]"), app.pg.input_value(row + "input[data-f=w]")), ("11", "40"), "−/+ change the reps, not the weight")
+    eq(app.js("W.items[0].rows[0].r"), 11, "stepped reps are saved")
     app.click(row + "[data-a=log]")
     eq(app.state()["rows"], "3:1,3:0", "set logged")
     ok(app.js("W.restEnd>Date.now()"), "rest timer starts after logging")
