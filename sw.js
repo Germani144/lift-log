@@ -1,5 +1,5 @@
-const VER='2.11';   // app version, kept equal to index.html by tools/build.py (read by "Check for updates")
-const C='lift-log-19d0852898';
+const VER='2.12';   // app version, kept equal to index.html by tools/build.py (read by "Check for updates")
+const C='lift-log-1da64b4020';
 // Every app on germani144.github.io shares one CacheStorage. This worker only ever touches caches whose
 // name starts with its own prefix ("liftlog-" was this app's old prefix), and only requests inside its scope.
 const OWN=['lift-log-','liftlog-'];

@@ -1,22 +1,22 @@
 /* ---------- state ---------- */
-let S = { tab: 'train', view: null, ex: [], tpl: [], pr: {}, prl: [], hist: [] },
-  E = null,
-  W = null;
+let state = { tab: 'train', view: null, ex: [], tpl: [], pr: {}, prl: [], hist: [] },
+  draft = null,
+  workout = null;
 try {
-  W = JSON.parse(localStorage.getItem(LSP + 'w') || 'null');
+  workout = JSON.parse(localStorage.getItem(LS_PREFIX + 'w') || 'null');
 } catch {}
-const saveW = () => {
+const saveWorkout = () => {
   try {
-    localStorage.setItem(LSP + 'w', JSON.stringify(W));
+    localStorage.setItem(LS_PREFIX + 'w', JSON.stringify(workout));
   } catch {}
 };
-const EX = id => S.ex.find(e => e.id == id);
-async function load() {
-  S.ex = await all('exercises');
-  S.tpl = await all('templates');
-  S.sets = await all('sets');
-  S.pr = {};
-  S.tpl.forEach(t => {
+const exerciseById = id => state.ex.find(e => e.id == id);
+async function loadState() {
+  state.ex = await getAll('exercises');
+  state.tpl = await getAll('templates');
+  state.sets = await getAll('sets');
+  state.pr = {};
+  state.tpl.forEach(t => {
     if (!t.weeks) t.weeks = 8;
     if (!t.days) {
       t.days = [{ name: 'Day 1', items: t.items || [] }];
@@ -24,14 +24,14 @@ async function load() {
     }
     for (const d of t.days)
       for (const it of d.items) {
-        if (!it.mode) it.mode = EX(it.exId)?.mode == 'pct' ? 'pct' : 'rir';
+        if (!it.mode) it.mode = exerciseById(it.exId)?.mode == 'pct' ? 'pct' : 'rir';
         if (it.mode == 'pct' && !it.lines?.length) {
           it.lines = linesFromText(it.text);
-          if (!it.lines.length) it.lines = [newLine()];
+          if (!it.lines.length) it.lines = [newPctLine()];
         }
       }
   });
-  (await all('pr_history')).sort((a, b) => a.t - b.t).forEach(p => (S.pr[p.exId] = p));
+  (await getAll('pr_history')).sort((a, b) => a.t - b.t).forEach(p => (state.pr[p.exId] = p));
 } // latest tested PR per exercise
 
 /* ---------- plan slots: each one is RIR (sets, rep range, target RIR) or % of 1RM (lines of sets x reps @ % with a target RPE) ---------- */
@@ -44,22 +44,22 @@ function linesFromText(t) {
   }
   return out;
 }
-const rememberMode = async (ex, m) => {
+const rememberTrackingMode = async (ex, m) => {
   if (ex && ex.mode != m) {
     ex.mode = m;
-    await put('exercises', ex);
+    await dbPut('exercises', ex);
   }
 }; // new plan slots and quick adds start in the mode you used last
-const newLine = () => ({ n: 3, r: 3, p: 75 });
+const newPctLine = () => ({ n: 3, r: 3, p: 75 });
 // RIR slots: one target RIR per week of the plan.
-const rirWeeks = (it, weeks, ex) => {
+const weeklyRirTargets = (it, weeks, ex) => {
   const a = Array.isArray(it.rirW) ? it.rirW.slice(0, weeks) : [],
     d = a.length ? a[a.length - 1] : (it.rir ?? ex?.rir ?? 2);
   while (a.length < weeks) a.push(d);
   return a;
 };
-async function addItem(it, wk = 1) {
-  const ex = EX(it.exId);
+async function addExerciseToWorkout(it, wk = 1) {
+  const ex = exerciseById(it.exId);
   if (!ex) return;
   const pk = (a, b) => (a === '' || a == null ? b : a),
     mode = it.mode || (ex.mode == 'pct' ? 'pct' : 'rir'),
@@ -69,28 +69,28 @@ async function addItem(it, wk = 1) {
       Array.isArray(it.rirW) && it.rirW.length
         ? +it.rirW[Math.min(wk, it.rirW.length) - 1]
         : (pk(it.rir, ex.rir) ?? 2),
-    item = { exId: ex.id, mode, lo, hi, rirT, rows: [], hint: '', bwo: bwo(ex) },
-    g = await suggest({ ...ex, lo, hi, rir: rirT }, mode == 'pct' && it.lines?.length ? 0 : it.n || 3);
+    item = { exId: ex.id, mode, lo, hi, rirT, rows: [], hint: '', bwo: bodyweightFor(ex) },
+    g = await suggestSets({ ...ex, lo, hi, rir: rirT }, mode == 'pct' && it.lines?.length ? 0 : it.n || 3);
   item.hint = g.hint;
   if (mode == 'pct') {
-    const ref = await refFor(ex);
+    const ref = await reference1RM(ex);
     item.ref = ref?.w;
     item.refEst = ref?.est;
   }
   if (mode == 'pct' && it.lines?.length) {
     // planned % sets: the plan's %, nudged (max ±10%) by your recent trend at that rep count
-    const ss = (await all('sets', 'ex', ex.id))
+    const ss = (await getAll('sets', 'ex', ex.id))
       .filter(s => !s.wu)
       .sort((a, b) => a.t - b.t)
-      .map(s => tot(ex, s));
+      .map(s => withBodyweight(ex, s));
     let moved = 0;
     for (const l of it.lines) {
       const r = Math.max(1, Math.round(+l.r || 1)),
-        f = trend(ss, r),
+        f = strengthTrend(ss, r),
         wp = item.ref ? ((+l.p || 0) / 100) * item.ref : 0;
       if (f !== 1) moved = f;
       for (let k = 0; k < Math.max(1, Math.round(+l.n || 1)); k++)
-        item.rows.push({ w: wp > 0 ? outW(ex, wp * f) : '', r, rir: '', pw: wp, auto: true });
+        item.rows.push({ w: wp > 0 ? toLoadedWeight(ex, wp * f) : '', r, rir: '', pw: wp, auto: true });
     }
     const last = (item.hint || '').startsWith('Last:')
       ? item.hint.replace(/ · \d+–\d+ reps @ [\d.]+ RIR$/, '')
@@ -107,37 +107,42 @@ async function addItem(it, wk = 1) {
   if (nw) {
     const w0 = +item.rows[0].w || 0;
     item.rows.unshift(
-      ...RAMP[nw].map(([p, r]) => ({ w: w0 && ex.inc > 0 ? rnd(w0 * p, ex.inc) : '', r, rir: '', wu: true })),
+      ...WARMUP_RAMP[nw].map(([p, r]) => ({
+        w: w0 && ex.inc > 0 ? roundToStep(w0 * p, ex.inc) : '',
+        r,
+        rir: '',
+        wu: true,
+      })),
     );
   }
-  W.items.push(item);
+  workout.items.push(item);
 }
 
-async function start(tid, day = 0) {
-  PICK = null;
-  LAND = false;
-  const t = tid ? S.tpl.find(x => x.id == tid) : null,
+async function startWorkout(tid, day = 0) {
+  picker = null;
+  showTrainHome = false;
+  const t = tid ? state.tpl.find(x => x.id == tid) : null,
     dy = t && t.days[day];
-  W = {
+  workout = {
     sess: Date.now(),
     name: dy ? `${t.name} · ${dy.name}` : 'Quick workout',
     pd: dy ? `${t.id}:${day}` : undefined,
-    rest: +lg('rest') || 120,
+    rest: +lsGet('rest') || 120,
     restEnd: 0,
     items: [],
   };
   if (dy) {
-    const wk = planRun(t).wk;
-    for (const it of dy.items) await addItem(it, wk);
+    const wk = planProgress(t).wk;
+    for (const it of dy.items) await addExerciseToWorkout(it, wk);
   }
-  saveW();
+  saveWorkout();
   render();
 }
 
-function planRun(t) {
+function planProgress(t) {
   const dpw = t.days.length,
     seen = new Map();
-  S.sets
+  state.sets
     .filter(s => s.pd && s.pd.startsWith(t.id + ':') && s.sess >= t.runStart)
     .sort((a, b) => a.t - b.t)
     .forEach(s => {

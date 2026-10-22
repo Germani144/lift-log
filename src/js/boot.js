@@ -10,13 +10,13 @@ const hideSplash = () => {
   setTimeout(() => e.remove(), 500);
 };
 setTimeout(hideSplash, 5000);
-open()
+openDatabase()
   .then(async d => {
     db = d;
-    await load();
+    await loadState();
     render();
     setTimeout(hideSplash, Math.max(0, 1000 - performance.now()));
-    if (ghCfg() && lg('dirty') != '0') setTimeout(autoBackup, 3000);
+    if (githubConfig() && lsGet('dirty') != '0') setTimeout(autoBackup, 3000);
   })
   .catch(e => {
     hideSplash();

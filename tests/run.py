@@ -42,7 +42,7 @@ class App:
         self.pg.on("dialog", lambda d: (self.dialogs.append(d.message), d.accept("90")))
         self.pg.goto(url)
         try:
-            self.pg.wait_for_function("typeof S!=='undefined'&&document.querySelector('nav')", timeout=8000)
+            self.pg.wait_for_function("typeof state!=='undefined'&&document.querySelector('nav')", timeout=8000)
         except Exception:
             raise AssertionError("app didn't start (blocked script? wrong CSP hash?) " + "; ".join(self.errors)[:300])
 
@@ -66,9 +66,9 @@ class App:
         self.tab("Exercises"); self.click("[data-a=settings]")
 
     def state(self):
-        return self.js("({tab:S.tab,ex:S.ex.length,tpl:S.tpl.length,sets:S.sets.length,w:!!W,"
-                       "rows:W?W.items.map(i=>i.rows.length+':'+i.rows.filter(r=>r.done).length).join(','):'',"
-                       "view:S.view&&S.view.t,pick:!!PICK})")
+        return self.js("({tab:state.tab,ex:state.ex.length,tpl:state.tpl.length,sets:state.sets.length,w:!!workout,"
+                       "rows:workout?workout.items.map(i=>i.rows.length+':'+i.rows.filter(r=>r.done).length).join(','):'',"
+                       "view:state.view&&state.view.t,pick:!!picker})")
 
     def new_exercise(self, name, **f):
         self.tab("Exercises"); self.click("[data-a=exNew]"); self.fill("input[data-b=name]", name)
@@ -76,18 +76,18 @@ class App:
         for k, v in f.items():
             self.fill(f"input[data-b={k}]", v)
         self.click("[data-a=exSave]")
-        self.pg.wait_for_function("n=>!S.view&&S.ex.some(e=>e.name==n)", arg=name, timeout=5000)  # saving is async
+        self.pg.wait_for_function("n=>!state.view&&state.ex.some(e=>e.name==n)", arg=name, timeout=5000)  # saving is async
         if mode:   # last-used mode (no longer a setting in the editor)
-            self.js("async([n,m])=>{const e=S.ex.find(x=>x.name==n);e.mode=m;await put('exercises',e)}", [name, mode])
+            self.js("async([n,m])=>{const e=state.ex.find(x=>x.name==n);e.mode=m;await dbPut('exercises',e)}", [name, mode])
 
     def seed_sets(self, ex_name, sessions):
         """sessions: list of lists of (w, r, rir[, warmup]) — oldest first, one day apart."""
-        self.js("""async([n,ss])=>{const ex=S.ex.find(e=>e.name==n);let t=Date.now()-(ss.length+1)*864e5;
-          for(const s of ss){t+=864e5;let k=0;for(const [w,r,rir,wu] of s){const o={exId:ex.id,sess:t,wn:'Seed',t:t+(k++)*1000,w,r,rir};if(wu)o.wu=true;await put('sets',o)}}
-          await load();render()}""", [ex_name, sessions])
+        self.js("""async([n,ss])=>{const ex=state.ex.find(e=>e.name==n);let t=Date.now()-(ss.length+1)*864e5;
+          for(const s of ss){t+=864e5;let k=0;for(const [w,r,rir,wu] of s){const o={exId:ex.id,sess:t,wn:'Seed',t:t+(k++)*1000,w,r,rir};if(wu)o.wu=true;await dbPut('sets',o)}}
+          await loadState();render()}""", [ex_name, sessions])
 
     def suggest(self, ex_name, n=3, **over):
-        return self.js("async([n,k,o])=>{const ex={...S.ex.find(e=>e.name==n),...o};const g=await suggest(ex,k);return g.rows.map(r=>[r.w,r.r])}",
+        return self.js("async([n,k,o])=>{const ex={...state.ex.find(e=>e.name==n),...o};const g=await suggestSets(ex,k);return g.rows.map(r=>[r.w,r.r])}",
                        [ex_name, n, over])
 
     def close(self):
@@ -135,12 +135,12 @@ def main_flow(app):
     app.new_exercise("Deadlift", mode="pct", cur=170, pb=216)
     app.new_exercise("Bench")
     eq(app.state()["ex"], 3)
-    eq(app.js("S.pr[S.ex.find(e=>e.name=='Deadlift').id].w"), 170, "current 1RM saved")
+    eq(app.js("state.pr[state.ex.find(e=>e.name=='Deadlift').id].w"), 170, "current 1RM saved")
     app.tab("Plans"); app.click("[data-a=tplNew]"); app.fill("input[data-b=name]", "Upper lower")
     app.pg.select_option("select[data-dpw]", "2"); app.fill('input[data-b="days.0.name"]', "Upper")
     app.click('[data-tq="0"]'); app.pg.keyboard.type("Weighted"); app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(150)
     app.click("[data-a=tplSave]")
-    eq(app.js("S.tpl[0].days[0].items.map(i=>EX(i.exId).name)"), ["Weighted dips"])
+    eq(app.js("state.tpl[0].days[0].items.map(i=>exerciseById(i.exId).name)"), ["Weighted dips"])
     app.tab("Train"); app.click("[data-a=planStart]"); app.click('[data-a=start][data-d="0"]')
     eq(app.state()["rows"], "3:0", "plan day starts with 3 sets")
     app.click("[data-a=pickAdd]"); app.pg.keyboard.type("Bench"); app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(200)
@@ -149,19 +149,19 @@ def main_flow(app):
     app.fill(row + "input[data-f=w]", 40); app.fill(row + "input[data-f=r]", 10); app.fill(row + "[data-f=rir]", 2)
     app.click(row + "[data-a=step][data-d='1']"); app.click(row + "[data-a=step][data-d='1']"); app.click(row + "[data-a=step][data-d='-1']")
     eq((app.pg.input_value(row + "input[data-f=r]"), app.pg.input_value(row + "input[data-f=w]")), ("11", "40"), "−/+ change the reps, not the weight")
-    eq(app.js("W.items[0].rows[0].r"), 11, "stepped reps are saved")
+    eq(app.js("workout.items[0].rows[0].r"), 11, "stepped reps are saved")
     app.click(row + "[data-a=log]")
     eq(app.state()["rows"], "3:1,3:0", "set logged")
-    ok(app.js("W.restEnd>Date.now()"), "rest timer starts after logging")
-    rest = app.js("W.rest"); app.click("[data-a=rinc]"); eq(app.js("W.rest"), rest + 15, "+15 s")
+    ok(app.js("workout.restEnd>Date.now()"), "rest timer starts after logging")
+    rest = app.js("workout.rest"); app.click("[data-a=rinc]"); eq(app.js("workout.rest"), rest + 15, "+15 s")
     app.click("[data-a=undo]"); eq(app.state()["rows"], "3:0,3:0", "undo")
     app.click(row + "[data-a=log]"); app.click("[data-a=addset]"); eq(app.state()["rows"], "4:1,3:0", "add set")
     app.click(".card:has([data-a=addset]) >> nth=1 >> [data-a=rms] >> nth=-1"); eq(app.state()["rows"], "4:1,2:0", "remove set")
-    app.click("[data-a=toLanding]"); ok(app.js("LAND"), "back to landing"); app.click("[data-a=resume]")
+    app.click("[data-a=toLanding]"); ok(app.js("showTrainHome"), "back to landing"); app.click("[data-a=resume]")
     app.click("[data-a=finish]"); app.pg.wait_for_timeout(200)
     st = app.state(); eq((st["w"], st["sets"]), (False, 1), "finish saves the logged set")
     app.tab("History"); app.click(".cd.tr"); ok("Weighted dips" in app.pg.inner_text("main"), "history shows the workout")
-    eq(app.js("planRun(S.tpl[0]).total"), 1, "plan progress counts the workout")
+    eq(app.js("planProgress(state.tpl[0]).total"), 1, "plan progress counts the workout")
     eq(app.errors, [])
 
 
@@ -222,8 +222,8 @@ def empty_weight_means_bodyweight(app):
     app.fill(row + "input[data-f=w]", ""); app.fill(row + "input[data-f=r]", 8); app.fill(row + "[data-f=rir]", 2)
     app.click(row + "[data-a=log]")
     eq(app.dialogs, [], "no prompt")
-    ok(app.js("W.items[0].rows[0].done"), "a set with no weight logs as bodyweight")
-    last = app.js("(async()=>(await all('sets')).pop())()")
+    ok(app.js("workout.items[0].rows[0].done"), "a set with no weight logs as bodyweight")
+    last = app.js("(async()=>(await getAll('sets')).pop())()")
     eq((last["w"], last["r"]), (0, 8), "saved as 0 kg")
     eq(app.pg.input_value(row + "input[data-f=w]"), "BW", "once logged, an empty weight shows BW")
     app.click("[data-a=finish]"); app.tab("History"); app.click(".cd.tr")
@@ -236,12 +236,12 @@ def empty_weight_means_bodyweight(app):
 def edit_a_past_workout(app):
     app.new_exercise("Squat"); app.new_exercise("Curl", inc=1)
     app.seed_sets("Squat", [[(100, 5, 2), (100, 5, 2), (60, 8, None, 1)]])
-    before = app.js("(async()=>(await all('sets')).sort((a,b)=>a.t-b.t))()")
+    before = app.js("(async()=>(await getAll('sets')).sort((a,b)=>a.t-b.t))()")
     sess = before[0]["sess"]
     app.tab("History"); app.click(f'[data-a=wedOpen][data-i="{sess}"]'); eq(app.state()["view"], "wed")
     # cancel discards
     app.fill('.eset[data-k="0"][data-j="0"] input[data-wf=w]', 999); app.click("[data-a=wedCancel]")
-    eq(app.js("(async()=>(await all('sets')).map(s=>s.w))()"), [100, 100, 60], "Cancel changes nothing")
+    eq(app.js("(async()=>(await getAll('sets')).map(s=>s.w))()"), [100, 100, 60], "Cancel changes nothing")
     app.click(f'[data-a=wedOpen][data-i="{sess}"]')
     app.fill('.eset[data-k="0"][data-j="0"] input[data-wf=w]', 105)      # change a weight
     app.fill('.eset[data-k="0"][data-j="0"] [data-wf=rir]', 1)      # and its RIR
@@ -250,13 +250,13 @@ def edit_a_past_workout(app):
     app.click('#wq'); app.pg.keyboard.type("Curl"); app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(150)
     app.fill('.eset[data-k="1"][data-j="0"] input[data-wf=w]', 12); app.fill('.eset[data-k="1"][data-j="0"] input[data-wf=r]', 10)
     app.fill("input[data-wn]", "Leg day")
-    app.pg.fill("input[data-wd]", app.js(f"dk({sess}-864e5)"))           # moved to the day before
+    app.pg.fill("input[data-wd]", app.js(f"dayKey({sess}-864e5)"))           # moved to the day before
     app.click("[data-a=wedSave]"); app.pg.wait_for_timeout(300)
-    after = app.js("(async()=>(await all('sets')).sort((a,b)=>a.t-b.t).map(s=>[EX(s.exId).name,s.w,s.r,s.rir,!!s.wu,s.wn,s.sess]))()")
+    after = app.js("(async()=>(await getAll('sets')).sort((a,b)=>a.t-b.t).map(s=>[exerciseById(s.exId).name,s.w,s.r,s.rir,!!s.wu,s.wn,s.sess]))()")
     new_sess = sess - 86400000
     eq(after, [["Squat", 105, 5, 1, False, "Leg day", new_sess], ["Squat", 60, 8, None, True, "Leg day", new_sess],
                ["Squat", 105, 5, 1, False, "Leg day", new_sess], ["Curl", 12, 10, None, False, "Leg day", new_sess]], "saved edits")
-    eq(app.js("(async()=>(await all('sets')).sort((a,b)=>a.t-b.t)[0].id)()"), before[0]["id"], "edited set keeps its id")
+    eq(app.js("(async()=>(await getAll('sets')).sort((a,b)=>a.t-b.t)[0].id)()"), before[0]["id"], "edited set keeps its id")
     app.click(f'[data-a=wedOpen][data-i="{new_sess}"]'); app.fill('.eset[data-k="1"][data-j="0"] input[data-wf=r]', "")
     app.click("[data-a=wedSave]"); ok(app.state()["view"] == "wed", "can't save a set without reps")
     app.pg.go_back(); app.pg.wait_for_timeout(150); eq(app.state()["view"], None, "back gesture closes the editor")
@@ -279,10 +279,10 @@ def _plan_one(app, name, mode=None, line=None):
 def percent_plan_and_switching_views(app):
     app.new_exercise("Clean", inc=2, cur=100)             # default tracking: RIR
     _plan_one(app, "Clean", "pct", {"n": 3, "r": 2, "p": 70})
-    eq(app.js("S.tpl[0].days[0].items[0].mode"), "pct")
-    eq(app.js("S.tpl[0].days[0].items[0].lines"), [{"n": 3, "r": 2, "p": 70}], "plan lines: sets x reps @ %")
-    eq(app.js("W.items[0].mode"), "pct", "workout starts in the plan's mode")
-    eq([r["w"] for r in app.js("W.items[0].rows")], [70, 70, 70], "no history yet: exactly the plan, 70% of 100")
+    eq(app.js("state.tpl[0].days[0].items[0].mode"), "pct")
+    eq(app.js("state.tpl[0].days[0].items[0].lines"), [{"n": 3, "r": 2, "p": 70}], "plan lines: sets x reps @ %")
+    eq(app.js("workout.items[0].mode"), "pct", "workout starts in the plan's mode")
+    eq([r["w"] for r in app.js("workout.items[0].rows")], [70, 70, 70], "no history yet: exactly the plan, 70% of 100")
     hdr = app.pg.inner_text(".set.hdr")
     ok("% of 1RM" in hdr and "RPE" in hdr, f"% view headers, got {hdr!r}")
     row = lambda j: f'.set[data-j="{j}"] >> '
@@ -291,15 +291,15 @@ def percent_plan_and_switching_views(app):
     def log(j, rpe):
         app.fill(row(j) + "[data-f=rir]", 10 - rpe); app.pg.locator(row(j) + "[data-f=rir]").dispatch_event("input"); app.click(row(j) + "[data-a=log]")
     log(0, 7)
-    saved = app.js("(async()=>(await all('sets')).pop())()")
+    saved = app.js("(async()=>(await getAll('sets')).pop())()")
     eq((saved["w"], saved["r"], saved["rir"]), (70, 2, 3), "RPE 7 is stored as RIR 3")
-    eq(app.js("W.items[0].rows[1].w"), 70, "first set with no history: nothing to compare with yet")
+    eq(app.js("workout.items[0].rows[1].w"), 70, "first set with no history: nothing to compare with yet")
     app.click("[data-a=mode][data-m=rir]")
     eq((app.pg.input_value(row(0) + "input[data-f=w]"), app.pg.input_value(row(0) + "[data-f=rir]")), ("70", "3"), "RIR view: same set as kg and RIR")
     app.click("[data-a=mode][data-m=pct]")
     log(1, 9)                                              # same weight felt much harder than set 1
-    w = app.js("W.items[0].rows[2].w")
-    ok(63 <= w < 70 and app.js("W.items[0].rows[2].adj"), f"harder than the first set: the next one gets lighter (max -10%), got {w}")
+    w = app.js("workout.items[0].rows[2].w")
+    ok(63 <= w < 70 and app.js("workout.items[0].rows[2].adj"), f"harder than the first set: the next one gets lighter (max -10%), got {w}")
     ok("adjusted" in app.pg.inner_text(row(2) + ".inf"), "shows that it adjusted")
 
 
@@ -308,19 +308,19 @@ def percent_sets_follow_your_history(app):
     app.new_exercise("Clean", inc=2, cur=100)
     app.seed_sets("Clean", [[(70, 2, 3)] * 3] * 4)          # 70x2 usually feels like RPE 7
     _plan_one(app, "Clean", "pct", {"n": 4, "r": 2, "p": 70})
-    eq([r["w"] for r in app.js("W.items[0].rows")], [70] * 4, "steady history: start at the plan")
+    eq([r["w"] for r in app.js("workout.items[0].rows")], [70] * 4, "steady history: start at the plan")
     row = lambda j: f'.set[data-j="{j}"] >> '
     app.fill(row(1) + "input[data-f=w]", 74); app.pg.locator(row(1) + "input[data-f=w]").dispatch_event("input")   # my own choice for set 2
     app.fill(row(0) + "[data-f=rir]", 1); app.pg.locator(row(0) + "[data-f=rir]").dispatch_event("input")
     app.click(row(0) + "[data-a=log]")                      # today 70x2 is an RPE 9 (= 1 RIR)
-    rows = app.js("W.items[0].rows")
+    rows = app.js("workout.items[0].rows")
     ok(63 <= rows[2]["w"] < 70, f"harder than usual: later sets get lighter, got {rows[2]['w']}")
     eq(round(rows[1]["w"], 2), 74, "a set you edited yourself is left alone")
     # next time: recent sessions felt harder than the longer run, so the plan starts lighter
     app.click("[data-a=finish]")
     app.seed_sets("Clean", [[(70, 2, 0)] * 3] * 2)
     app.tab("Train"); app.click('[data-a=start][data-d="0"]')
-    w0 = app.js("W.items[0].rows[0].w")
+    w0 = app.js("workout.items[0].rows[0].w")
     ok(63 <= w0 < 70, f"recent sessions harder than usual: start below the plan, got {w0}")
     ok("vs plan from recent sessions" in app.pg.inner_text(".card:has([data-a=addset])"), "says why")
 
@@ -335,14 +335,14 @@ def rir_plan_targets_change_by_week(app):
     app.fill('input[data-b="days.0.items.0.lo"]', 5); app.fill('input[data-b="days.0.items.0.hi"]', 6)
     app.fill('[data-b="days.0.items.0.rirW.0"]', 3); app.fill('[data-b="days.0.items.0.rirW.1"]', 1)
     app.click("[data-a=tplSave]")
-    it = app.js("S.tpl[0].days[0].items[0]")
+    it = app.js("state.tpl[0].days[0].items[0]")
     eq((it["lo"], it["hi"], it["rirW"]), (5, 6, [3, 1]), "the plan keeps its own rep range and weekly RIR")
     app.tab("Train"); app.click("[data-a=planStart]"); app.click('[data-a=start][data-d="0"]')
-    eq((app.js("W.items[0].rirT"), app.js("W.items[0].lo"), app.js("W.items[0].hi")), (3, 5, 6), "week 1 uses W1")
+    eq((app.js("workout.items[0].rirT"), app.js("workout.items[0].lo"), app.js("workout.items[0].hi")), (3, 5, 6), "week 1 uses W1")
     row = '.set[data-j="0"] >> '
     app.fill(row + "input[data-f=w]", 80); app.pg.locator(row + "input[data-f=w]").dispatch_event("input"); app.click(row + "[data-a=log]")
     app.click("[data-a=finish]"); app.tab("Train"); app.click('[data-a=start][data-d="0"]')
-    eq(app.js("W.items[0].rirT"), 1, "week 2 uses W2")
+    eq(app.js("workout.items[0].rirT"), 1, "week 2 uses W2")
 
 
 @test
@@ -355,19 +355,19 @@ def rir_view_adjusts_next_sets_too(app):
     for f in ("w", "r", "rir"):
         app.pg.locator(row(0) + f"[data-f={f}]").dispatch_event("input")
     app.click(row(0) + "[data-a=log]")                     # way easier than the 2-RIR target
-    w, r = app.js("[W.items[0].rows[1].w,W.items[0].rows[1].r]")
+    w, r = app.js("[workout.items[0].rows[1].w,workout.items[0].rows[1].r]")
     ok(w > 100 and r <= 8, f"next set should get heavier within the rep range, got {w}x{r}")
 
 
 @test
 def old_text_plans_and_backups_keep_working(app):
     app.new_exercise("Clean", mode="pct", cur=100)
-    app.js("(async()=>{await put('templates',{name:'Old',weeks:8,days:[{name:'D',items:[{exId:S.ex[0].id,text:'3*80%x2\\n2*85%x1'}]}]});await load();render()})()")
+    app.js("(async()=>{await dbPut('templates',{name:'Old',weeks:8,days:[{name:'D',items:[{exId:state.ex[0].id,text:'3*80%x2\\n2*85%x1'}]}]});await loadState();render()})()")
     app.pg.wait_for_timeout(200)
-    it = app.js("S.tpl[0].days[0].items[0]")
+    it = app.js("state.tpl[0].days[0].items[0]")
     eq((it["mode"], it["lines"]), ("pct", [{"n": 3, "p": 80, "r": 2}, {"n": 2, "p": 85, "r": 1}]), "old text turns into lines")
-    app.js("(async()=>{const t=S.tpl[0];await put('templates',t)})()")
-    d = app.js("(async()=>{const d={app:'liftlog',v:1};for(const n of STORES)d[n]=await all(n);return clean(d)})()")
+    app.js("(async()=>{const t=state.tpl[0];await dbPut('templates',t)})()")
+    d = app.js("(async()=>{const d={app:'liftlog',v:1};for(const n of STORES)d[n]=await getAll(n);return sanitizeBackup(d)})()")
     ci = d["templates"][0]["days"][0]["items"][0]
     eq((ci["mode"], ci["lines"][1]), ("pct", {"n": 2, "r": 1, "p": 85}), "backup keeps mode and lines")
 
@@ -380,10 +380,10 @@ def exercises_have_no_tracking_type_but_remember_the_last_one(app):
     app.click("[data-a=back]")
     ok("RIR" not in app.pg.inner_text(".exr") and "% of 1RM" not in app.pg.inner_text(".exr"), "the list doesn't show a tracking type")
     app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
-    eq(app.js("W.items[0].mode"), "rir", "starts in RIR")
+    eq(app.js("workout.items[0].mode"), "rir", "starts in RIR")
     app.click("[data-a=mode][data-m=pct]"); app.pg.wait_for_timeout(150)
     app.click("[data-a=pickAdd]"); app.click("#plist .chip")
-    eq(app.js("W.items[1].mode"), "pct", "next time it starts in the mode you used last")
+    eq(app.js("workout.items[1].mode"), "pct", "next time it starts in the mode you used last")
 
 
 @test
@@ -408,30 +408,30 @@ def chart_shows_date_and_value_on_touch(app):
 @test
 def bodyweight_lifts_use_total_load(app):
     app.settings(); app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
-    eq(app.js("BWv()"), 80, "bodyweight saved")
+    eq(app.js("bodyweight()"), 80, "bodyweight saved")
     app.new_exercise("Pull-ups", inc=2, lo=6, hi=10, cur=40)          # 1RM is +40 kg
     app.click("[data-a=exOpen]"); app.click("input[data-b=bwl]"); app.click("[data-a=exSave]")
-    eq(app.js("S.ex[0].bwl"), True)
+    eq(app.js("state.ex[0].bwl"), True)
     ok("+40" in app.pg.inner_text(".exr"), "list shows the 1RM as added kg")
     # % plan: 80% of (80 + 40) = 96 kg total = +16 kg on the belt
     _plan_one(app, "Pull-ups", "pct", {"n": 3, "r": 3, "p": 80})
-    eq([r["w"] for r in app.js("W.items[0].rows")], [16, 16, 16], "80% of 120 kg total, minus 80 kg bodyweight")
+    eq([r["w"] for r in app.js("workout.items[0].rows")], [16, 16, 16], "80% of 120 kg total, minus 80 kg bodyweight")
     row = '.set[data-j="0"] >> '
     eq(app.pg.input_value(row + "input[data-f=w]"), "80", "shown as 80%")
     ok("+16 kg" in app.pg.inner_text(row + ".inf"), "shows the added kg to load")
     ok("incl. 80 kg bodyweight" in app.pg.inner_text(".card:has([data-a=addset])"), "says bodyweight is included")
     app.click(row + "[data-a=log]")
-    eq(app.js("(async()=>(await all('sets')).pop().bw)()"), 80, "logged set remembers the bodyweight")
+    eq(app.js("(async()=>(await getAll('sets')).pop().bw)()"), 80, "logged set remembers the bodyweight")
 
 
 @test
 def bodyweight_sets_count_toward_strength(app):
     app.settings(); app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
     app.new_exercise("Dips", inc=2, lo=6, hi=10)
-    app.js("(async()=>{const e=S.ex[0];e.bwl=true;await put('exercises',e);await load()})()")
+    app.js("(async()=>{const e=state.ex[0];e.bwl=true;await dbPut('exercises',e);await loadState()})()")
     app.seed_sets("Dips", [[(0, 10, 2)] * 3] * 2)                     # 10 bodyweight dips @ 2 RIR, twice
     eq(app.suggest("Dips")[0], [8, 6], "top of the range at bodyweight: add weight (+8 kg x 6), not just reps")
-    d = app.js("(async()=>{const d={app:'liftlog',v:1};for(const n of STORES)d[n]=await all(n);d.bw=BWv();return clean(d)})()")
+    d = app.js("(async()=>{const d={app:'liftlog',v:1};for(const n of STORES)d[n]=await getAll(n);d.bw=bodyweight();return sanitizeBackup(d)})()")
     eq((d["bw"], d["exercises"][0]["bwl"]), (80, True), "backup keeps bodyweight and the flag")
 
 
@@ -446,9 +446,9 @@ def rir_is_picked_and_5plus_is_ignored_for_suggestions(app):
     eq(opts, ["RIR", "0", "0.5", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5", "5+"], "0-5 in half steps, then 5+")
     app.fill(row + "[data-f=w]", 60); app.pg.locator(row + "[data-f=w]").dispatch_event("input")
     app.fill(row + "[data-f=rir]", 6); app.click(row + "[data-a=log]")
-    eq(app.js("(async()=>(await all('sets')).pop().rir)()"), 6, "5+ is stored")
+    eq(app.js("(async()=>(await getAll('sets')).pop().rir)()"), 6, "5+ is stored")
     ok("not used for suggestions" in app.pg.inner_text(row + ".inf"), "says it's not used")
-    eq(app.js("W.items[0].rows[1].adj||false"), False, "a 5+ set doesn't adjust the next sets")
+    eq(app.js("workout.items[0].rows[1].adj||false"), False, "a 5+ set doesn't adjust the next sets")
     app.click("[data-a=finish]"); app.tab("History"); app.click(".cd.td")
     ok("RIR 5+" in app.pg.inner_text("main"), "history shows 5+")
     eq(app.suggest("Squat"), before, "and suggestions ignore it, like a warm-up")
@@ -472,7 +472,7 @@ def offline_works_and_other_apps_caches_survive(app):
         if not pg.evaluate("!!navigator.serviceWorker.controller"):
             pg.reload()
         pg.wait_for_function("!!navigator.serviceWorker.controller", timeout=15000)
-        pg.wait_for_function("typeof S!=='undefined'&&document.querySelector('nav')", timeout=10000)
+        pg.wait_for_function("typeof state!=='undefined'&&document.querySelector('nav')", timeout=10000)
         keys = pg.evaluate("caches.keys()")
         cur = [k for k in keys if k.startswith("lift-log-") and k != "lift-log-old"]
         eq(len(cur), 1, f"exactly one current Lift Log cache, got {keys}")
@@ -482,7 +482,7 @@ def offline_works_and_other_apps_caches_survive(app):
             ok(old not in keys, f"this app's old cache {old} should be cleaned up, got {keys}")
         ok(pg.evaluate("navigator.serviceWorker.controller.scriptURL").endswith("/sw.js"), "Lift Log's worker controls the page")
         ctx.set_offline(True)
-        pg.reload(); pg.wait_for_function("typeof S!=='undefined'&&document.querySelector('nav')", timeout=10000)
+        pg.reload(); pg.wait_for_function("typeof state!=='undefined'&&document.querySelector('nav')", timeout=10000)
         ok("Train" in pg.inner_text("nav"), "the app opens offline")
         ok(pg.evaluate("[...document.fonts].some(f=>f.status=='loaded')"), "fonts come from the cache offline")
     finally:
@@ -500,14 +500,14 @@ def storage_keys_are_prefixed_and_old_ones_move_over(app):
           L.setItem('w',JSON.stringify({sess:Date.now(),name:'Quick workout',rest:90,restEnd:0,items:[]}));
           L.setItem('rest','150');L.setItem('bw','81');L.setItem('dirty','1');
           L.setItem('cl_items','[]')}""")          # another app's key
-        pg.goto(base + "index.html"); pg.wait_for_function("typeof S!=='undefined'&&document.querySelector('nav')")
+        pg.goto(base + "index.html"); pg.wait_for_function("typeof state!=='undefined'&&document.querySelector('nav')")
         st = pg.evaluate("Object.fromEntries(Object.keys(localStorage).map(k=>[k,localStorage.getItem(k)]))")
         eq(json.loads(st["lift-log:gh"])["token"], "t0k", "backup settings moved")
-        ok("lift-log:w" in st and pg.evaluate("!!W"), "workout in progress moved and still open")
+        ok("lift-log:w" in st and pg.evaluate("!!workout"), "workout in progress moved and still open")
         eq((st.get("lift-log:rest"), st.get("lift-log:bw")), ("150", "81"), "rest default and bodyweight moved")
         ok("gh" not in st and "w" not in st, "keys that are clearly Lift Log's are removed after moving")
         eq(st.get("cl_items"), "[]", "another app's keys are untouched")
-        pg.evaluate("ls('rest',120)")
+        pg.evaluate("lsSet('rest',120)")
         bad = [k for k in pg.evaluate("Object.keys(localStorage)") if not k.startswith("lift-log:") and k not in ("rest", "bw", "dirty", "cl_items")]
         eq(bad, [], "Lift Log writes only prefixed keys")
     finally:
@@ -528,12 +528,12 @@ def settings_page_body_and_bmi(app):
     app.fill("#bwi", 80); app.pg.locator("#bwi").dispatch_event("input")
     app.fill("#hti", 180); app.pg.locator("#hti").dispatch_event("input")
     ok(app.pg.inner_text("#bmi").startswith("BMI 24.7"), "BMI = 80 / 1.8² = 24.7: " + app.pg.inner_text("#bmi"))
-    eq((app.js("localStorage.getItem('lift-log:ht')"), app.js("HTv()")), ("180", 180), "height saved, prefixed")
+    eq((app.js("localStorage.getItem('lift-log:ht')"), app.js("height()")), ("180", 180), "height saved, prefixed")
     app.fill("#hti", 30); app.pg.locator("#hti").dispatch_event("input")
-    eq(app.js("HTv()"), 180, "implausible height ignored")
-    app.click("[data-a=back]"); ok(app.pg.locator("#bwi").count() == 0 and app.js("S.view") is None, "Back leaves Settings")
-    app.settings(); app.pg.go_back(); app.pg.wait_for_timeout(200); eq(app.js("S.view"), None, "back gesture leaves Settings")
-    d = app.js("(async()=>{const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await all(n);d.bw=BWv();d.ht=HTv();return clean(d)})()")
+    eq(app.js("height()"), 180, "implausible height ignored")
+    app.click("[data-a=back]"); ok(app.pg.locator("#bwi").count() == 0 and app.js("state.view") is None, "Back leaves Settings")
+    app.settings(); app.pg.go_back(); app.pg.wait_for_timeout(200); eq(app.js("state.view"), None, "back gesture leaves Settings")
+    d = app.js("(async()=>{const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await getAll(n);d.bw=bodyweight();d.ht=height();return sanitizeBackup(d)})()")
     eq((d["bw"], d["ht"]), (80, 180), "backups carry bodyweight and height")
     app.tab("Train"); app.click("[data-a=start]")
     eq(app.pg.locator("[data-a=settings]").count(), 0, "no cog during a workout (Finish sits there)")
@@ -555,7 +555,7 @@ def check_for_updates(app):
     app.js("window.__before=1")
     with app.pg.expect_navigation():
         app.click("[data-a=upd]")
-    app.pg.wait_for_function("typeof S!=='undefined'&&document.querySelector('nav')")
+    app.pg.wait_for_function("typeof state!=='undefined'&&document.querySelector('nav')")
     ok(app.dialogs and app.dialogs[-1].startswith("Version v99.0 is available"), "asks to update: " + str(app.dialogs[-1:]))
     eq(app.js("window.__before"), None, "the app reloaded")
     eq(sorted(app.js("caches.keys()")), ["nap-log-abc"], "only this app's caches are cleared")
@@ -579,17 +579,17 @@ def manifest_claims_only_this_app(app):
 @test
 def warmup_sets(app):
     app.new_exercise("Squat", lo=5, hi=8, wu=3)
-    eq(app.js("S.ex[0].wu"), 3)
+    eq(app.js("state.ex[0].wu"), 3)
     app.seed_sets("Squat", [[(100, 6, 2)] * 3] * 3)
     app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); app.click("#plist .chip")
-    rows = app.js("W.items[0].rows")
+    rows = app.js("workout.items[0].rows")
     eq([bool(r.get("wu")) for r in rows], [True, True, True, False, False, False], "3 warm-ups before 3 working sets")
     ok(rows[0]["w"] < rows[1]["w"] < rows[2]["w"] < rows[3]["w"], "warm-up ramp climbs to the working weight")
     app.click('.set[data-j="0"] [data-a=log]')
-    last = app.js("(async()=>(await all('sets')).sort((a,b)=>a.t-b.t).pop())()")
+    last = app.js("(async()=>(await getAll('sets')).sort((a,b)=>a.t-b.t).pop())()")
     eq((last.get("wu"), last["test"]), (True, False), "logged warm-up is flagged")
     app.click('.set[data-j="0"] [data-a=wu]')
-    last = app.js("(async()=>(await all('sets')).sort((a,b)=>a.t-b.t).pop())()")
+    last = app.js("(async()=>(await getAll('sets')).sort((a,b)=>a.t-b.t).pop())()")
     ok("wu" not in last, "toggling a logged set updates the saved record")
 
 
@@ -597,13 +597,13 @@ def warmup_sets(app):
 def backup_round_trip_and_validation(app):
     app.new_exercise("Squat", wu=2, pb=150)
     app.seed_sets("Squat", [[(40, 8, None, 1), (100, 5, 2)]])
-    d = app.js("(async()=>{const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await all(n);return d})()")
-    c = app.js("d=>clean(d)", d)
+    d = app.js("(async()=>{const d={app:'liftlog',v:1,t:Date.now()};for(const n of STORES)d[n]=await getAll(n);return d})()")
+    c = app.js("d=>sanitizeBackup(d)", d)
     eq((c["exercises"][0]["wu"], c["exercises"][0]["pb"]), (2, 150), "exercise settings survive backup")
     eq(sum(1 for s in c["sets"] if s.get("wu")), 1, "warm-up flag survives backup")
     for bad in ({**d, "sets": "nope"}, {**d, "exercises": [{"id": 1, "name": "x", "mode": "evil", "inc": 2}]}):
         ok(app.js("async d=>(await applyBackup(d))===false", bad), "invalid backup must be rejected")
-    eq(app.js("S.ex.length"), 1, "a rejected backup changes nothing")
+    eq(app.js("state.ex.length"), 1, "a rejected backup changes nothing")
 
 
 @test
@@ -636,7 +636,7 @@ def back_gesture_closes_pages(app):
     eq((app.state()["view"], app.pg.url.endswith("index.html")), (None, True), "back closes the exercise page, stays in app")
     app.tab("Train"); app.click("[data-a=start]"); app.click("[data-a=pickAdd]"); eq(app.state()["pick"], True)
     app.pg.go_back(); app.pg.wait_for_timeout(200); eq((app.state()["pick"], app.state()["w"]), (False, True), "back closes the picker")
-    app.pg.go_back(); app.pg.wait_for_timeout(200); ok(app.js("LAND"), "back from a workout goes to the Train page")
+    app.pg.go_back(); app.pg.wait_for_timeout(200); ok(app.js("showTrainHome"), "back from a workout goes to the Train page")
 
 
 @test
@@ -652,7 +652,7 @@ def search_and_order(app):
     app.pg.wait_for_timeout(100)
     eq(app.pg.locator("#plist .sg").all_inner_texts()[0].split("\n")[0], "Squats", "starts-with ranks first")
     app.pg.keyboard.press("Enter"); app.pg.wait_for_timeout(150)
-    eq(app.js("W.items.map(i=>EX(i.exId).name)"), ["Squats"])
+    eq(app.js("workout.items.map(i=>exerciseById(i.exId).name)"), ["Squats"])
 
 
 @test
@@ -671,8 +671,8 @@ def bottom_bar_is_never_rebuilt(app):
 def only_the_content_scrolls(app):
     """The bar is part of a fixed frame; only <main> scrolls, so changing tabs never moves the bar."""
     for i in range(30):
-        app.js(f"put('exercises',{{name:'Ex {i:02d}',mode:'rir',inc:2,lo:8,hi:12,rir:2}})")
-    app.js("load().then(render)"); app.tab("Exercises")
+        app.js(f"dbPut('exercises',{{name:'Ex {i:02d}',mode:'rir',inc:2,lo:8,hi:12,rir:2}})")
+    app.js("loadState().then(render)"); app.tab("Exercises")
     nav = "(r=>[Math.round(r.bottom),innerHeight])(document.querySelector('nav').getBoundingClientRect())"
     app.js("document.querySelector('main').scrollTop=1500")
     eq(app.js("scrollY"), 0, "the window itself must never scroll")

@@ -1,10 +1,10 @@
-const back = () => {
-  S.view = null;
-  E = null;
+const closePage = () => {
+  state.view = null;
+  draft = null;
   render();
 };
 
-const A = {
+const actions = {
   upd: async () => {
     const b = $('#updb'); // ask the server which version it serves (sw.js carries the same VER); update on demand
     b.textContent = 'Checking…';
@@ -37,66 +37,66 @@ const A = {
   backup: () => exportData(),
   restore: () => $('#imp').click(),
   tab: async (s, d) => {
-    PICK = null;
-    S.tab = d.i;
-    S.view = null;
-    E = null;
-    await load();
+    picker = null;
+    state.tab = d.i;
+    state.view = null;
+    draft = null;
+    await loadState();
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
   },
-  back,
+  back: closePage,
   start: (s, d) => {
     if (
-      W &&
+      workout &&
       !confirm(
-        `You have a workout in progress (${W.name}). Start a new one instead? Sets you already logged stay in History.`,
+        `You have a workout in progress (${workout.name}). Start a new one instead? Sets you already logged stay in History.`,
       )
     )
       return;
-    start(+d.i || null, +d.d || 0);
+    startWorkout(+d.i || null, +d.d || 0);
   },
   toLanding: () => {
-    LAND = true;
+    showTrainHome = true;
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
   },
   resume: () => {
-    LAND = false;
+    showTrainHome = false;
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
   },
   finish: async () => {
     if (confirm('Finish workout?')) {
-      W = null;
-      LAND = false;
-      saveW();
-      await load();
+      workout = null;
+      showTrainHome = false;
+      saveWorkout();
+      await loadState();
       render();
     }
   },
   pickAdd: () => {
-    PICK = { t: 'add', y: scY() };
-    PQ = '';
-    PALL = false;
+    picker = { t: 'add', y: mainScrollY() };
+    pickerQuery = '';
+    pickerShowAll = false;
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
     $('#pq')?.focus();
   },
   pickAll: () => {
-    PALL = true;
-    $('#plist').innerHTML = pickBox();
+    pickerShowAll = true;
+    $('#plist').innerHTML = pickerResults();
   },
   pickNew: async () => {
-    const id = await newEx($('#pq').value);
-    if (id) A.pickGo(null, { x: id });
+    const id = await createExercise($('#pq').value);
+    if (id) actions.pickGo(null, { x: id });
   },
   tplMode: (s, d) => {
-    const it = E.days[+d.k].items[+d.i],
-      x = EX(it.exId);
+    const it = draft.days[+d.k].items[+d.i],
+      x = exerciseById(it.exId);
     it.mode = d.m;
-    rememberMode(x, d.m);
-    if (d.m == 'pct' && !it.lines?.length) it.lines = [newLine()];
+    rememberTrackingMode(x, d.m);
+    if (d.m == 'pct' && !it.lines?.length) it.lines = [newPctLine()];
     if (d.m == 'rir') {
       it.n ??= 3;
       it.lo ??= x?.lo ?? 8;
@@ -105,19 +105,19 @@ const A = {
     render();
   },
   tplAddLine: (s, d) => {
-    const it = E.days[+d.k].items[+d.i],
+    const it = draft.days[+d.k].items[+d.i],
       l = it.lines[it.lines.length - 1];
-    it.lines.push(l ? { ...l } : newLine());
+    it.lines.push(l ? { ...l } : newPctLine());
     render();
   },
   tplRmLine: (s, d) => {
-    const it = E.days[+d.k].items[+d.i];
+    const it = draft.days[+d.k].items[+d.i];
     it.lines.splice(+d.l, 1);
-    if (!it.lines.length) it.lines.push(newLine());
+    if (!it.lines.length) it.lines.push(newPctLine());
     render();
   },
   tplSwap: (s, d) => {
-    TR = { k: +d.k, j: +d.i, q: '' };
+    planReplace = { k: +d.k, j: +d.i, q: '' };
     render();
     const q = $('[data-tr]');
     if (q) {
@@ -126,34 +126,34 @@ const A = {
     }
   },
   tplSwapX: () => {
-    TR = null;
+    planReplace = null;
     render();
   },
   tplSet: (s, d) => {
-    E.days[TR.k].items[TR.j].exId = +d.x;
-    TR = null;
+    draft.days[planReplace.k].items[planReplace.j].exId = +d.x;
+    planReplace = null;
     render();
   },
   tplSetNew: async () => {
-    const id = await newEx($('[data-tr]').value);
-    if (id) A.tplSet(null, { x: id });
+    const id = await createExercise($('[data-tr]').value);
+    if (id) actions.tplSet(null, { x: id });
   },
   tplPick: (s, d) => {
-    const x = EX(+d.x),
+    const x = exerciseById(+d.x),
       pm = x?.mode == 'pct';
-    E.days[+d.k].items.push(
+    draft.days[+d.k].items.push(
       pm
-        ? { exId: +d.x, mode: 'pct', lines: [newLine()] }
+        ? { exId: +d.x, mode: 'pct', lines: [newPctLine()] }
         : {
             exId: +d.x,
             mode: 'rir',
             n: 3,
             lo: x?.lo ?? 8,
             hi: x?.hi ?? 12,
-            rirW: Array(Math.max(1, Math.round(+E.weeks || 8))).fill(x?.rir ?? 2),
+            rirW: Array(Math.max(1, Math.round(+draft.weeks || 8))).fill(x?.rir ?? 2),
           },
     );
-    TQ = { k: +d.k, q: '' };
+    planAddSearch = { k: +d.k, q: '' };
     render();
     const q = $(`[data-tq="${d.k}"]`);
     if (q) {
@@ -162,121 +162,121 @@ const A = {
     }
   },
   tplPickNew: async (s, d) => {
-    const id = await newEx($(`[data-tq="${d.k}"]`).value);
-    if (id) A.tplPick(null, { k: d.k, x: id });
+    const id = await createExercise($(`[data-tq="${d.k}"]`).value);
+    if (id) actions.tplPick(null, { k: d.k, x: id });
   },
   repl: (s, d) => {
-    PICK = { t: 'rep', i: +d.i, y: scY() };
-    PQ = '';
-    PALL = false;
+    picker = { t: 'rep', i: +d.i, y: mainScrollY() };
+    pickerQuery = '';
+    pickerShowAll = false;
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
     $('#pq')?.focus();
   },
   pickCancel: () => {
-    const y = PICK.y;
-    PICK = null;
+    const y = picker.y;
+    picker = null;
     render();
-    scTo(0, y);
+    scrollMainTo(0, y);
   },
   pickGo: async (s, d) => {
     const exId = +d.x,
-      P = PICK;
+      P = picker;
     if (P.t == 'add') {
-      await addItem({ exId, n: 3 });
-      PICK = null;
-      saveW();
+      await addExerciseToWorkout({ exId, n: 3 });
+      picker = null;
+      saveWorkout();
       render();
-      scTo(0, 1e9);
+      scrollMainTo(0, 1e9);
       return;
     }
-    const it = W.items[P.i],
+    const it = workout.items[P.i],
       done = it.rows.filter(x => x.done);
     if (
       done.length &&
       !confirm(
-        `Replace ${EX(it.exId)?.name || 'this exercise'} with ${EX(exId).name}? Its ${done.length} logged set${done.length > 1 ? 's' : ''} in this workout will be deleted.`,
+        `Replace ${exerciseById(it.exId)?.name || 'this exercise'} with ${exerciseById(exId).name}? Its ${done.length} logged set${done.length > 1 ? 's' : ''} in this workout will be deleted.`,
       )
     )
       return;
-    for (const x of done) if (x.id) await del('sets', x.id);
-    await addItem({ exId, n: it.rows.filter(x => !x.wu).length || 3 });
-    W.items[P.i] = W.items.pop(); // swap the new item into the old one's place
-    PICK = null;
-    saveW();
+    for (const x of done) if (x.id) await dbDelete('sets', x.id);
+    await addExerciseToWorkout({ exId, n: it.rows.filter(x => !x.wu).length || 3 });
+    workout.items[P.i] = workout.items.pop(); // swap the new item into the old one's place
+    picker = null;
+    saveWorkout();
     render();
-    scTo(0, P.y);
+    scrollMainTo(0, P.y);
   },
-  rdec: () => setRest(W.rest - 15),
-  rinc: () => setRest(W.rest + 15),
+  rdec: () => setRest(workout.rest - 15),
+  rinc: () => setRest(workout.rest + 15),
   rstop: () => {
-    W.restEnd = 0;
-    saveW();
+    workout.restEnd = 0;
+    saveWorkout();
     tickRest();
   },
   redit: () => {
-    const v = prompt('Rest time (seconds or m:ss)', fmtT(W.rest));
+    const v = prompt('Rest time (seconds or m:ss)', clockText(workout.rest));
     if (v == null) return;
     const m = v.trim().match(/^(\d+):(\d{1,2})$/),
       n = m ? +m[1] * 60 + +m[2] : +v;
     n >= 15 && n <= 1800 ? setRest(n) : toast('Enter 15–1800 seconds, or m:ss');
   },
   planStart: async (s, d) => {
-    const t = S.tpl.find(x => x.id == d.i),
-      o = S.tpl.find(x => x.active && x.id != t.id);
+    const t = state.tpl.find(x => x.id == d.i),
+      o = state.tpl.find(x => x.active && x.id != t.id);
     if (o && !confirm(`Switch from "${o.name}" to "${t.name}"? The current plan will be closed.`)) return;
     if (o) {
       o.active = false;
-      await put('templates', o);
+      await dbPut('templates', o);
     }
     t.active = true;
     t.runStart = Date.now();
-    await put('templates', t);
-    await load();
+    await dbPut('templates', t);
+    await loadState();
     render();
   },
   planStop: async (s, d) => {
-    const t = S.tpl.find(x => x.id == d.i);
-    if (!planRun(t).done && !confirm('End this plan now? Your logged workouts stay in History.')) return;
+    const t = state.tpl.find(x => x.id == d.i);
+    if (!planProgress(t).done && !confirm('End this plan now? Your logged workouts stay in History.')) return;
     t.active = false;
-    await put('templates', t);
-    await load();
+    await dbPut('templates', t);
+    await loadState();
     render();
   },
   rms: async s => {
-    const it = W.items[s.dataset.i],
+    const it = workout.items[s.dataset.i],
       r = it.rows[s.dataset.j];
     if (r.done && !confirm('Remove this logged set?')) return;
-    if (r.id) await del('sets', r.id);
+    if (r.id) await dbDelete('sets', r.id);
     it.rows.splice(+s.dataset.j, 1);
-    saveW();
+    saveWorkout();
     render();
   },
   rmx: async (s, d) => {
-    const it = W.items[d.i],
+    const it = workout.items[d.i],
       done = it.rows.filter(x => x.done);
     if (
       !confirm(
         done.length
-          ? `Remove ${EX(it.exId)?.name || 'this exercise'} and delete its ${done.length} logged set(s) from this workout?`
+          ? `Remove ${exerciseById(it.exId)?.name || 'this exercise'} and delete its ${done.length} logged set(s) from this workout?`
           : 'Remove this exercise from the workout?',
       )
     )
       return;
-    for (const x of done) if (x.id) await del('sets', x.id);
-    W.items.splice(+d.i, 1);
-    saveW();
+    for (const x of done) if (x.id) await dbDelete('sets', x.id);
+    workout.items.splice(+d.i, 1);
+    saveWorkout();
     render();
   },
   addset: (s, d) => {
-    const rows = W.items[d.i].rows,
+    const rows = workout.items[d.i].rows,
       l = rows[rows.length - 1] || {};
     rows.push({ w: l.w ?? '', r: l.r ?? '', p: l.p ?? '' });
-    saveW();
+    saveWorkout();
     render();
   },
   step: (s, d) => {
-    const it = W.items[s.dataset.i],
+    const it = workout.items[s.dataset.i],
       r = it.rows[s.dataset.j]; // −/+ change the reps; the weight is typed
     if (r.r === '' || r.r == null) {
       if (+d.d < 0) return;
@@ -286,13 +286,13 @@ const A = {
     r.auto = false;
     delete r.adj;
     $('[data-f=r]', s).value = fmt(r.r);
-    saveW();
-    updInfo(s);
+    saveWorkout();
+    updateSetInfo(s);
   },
   log: async s => {
-    const it = W.items[s.dataset.i],
+    const it = workout.items[s.dataset.i],
       r = it.rows[s.dataset.j],
-      ex = EX(it.exId);
+      ex = exerciseById(it.exId);
     if (!(r.r > 0)) return toast('Enter reps'); // empty or 0 weight = bodyweight (BW)
     if (r.rir !== '' && r.rir != null && !(+r.rir >= 0 && +r.rir <= 10))
       return toast(
@@ -300,51 +300,51 @@ const A = {
           ? "RPE must be between 0 and 10. Leave it blank if you don't track it."
           : "RIR must be between 0 and 10. Leave it blank if you don't track it.",
       );
-    const test = !r.wu && isTest(r);
+    const test = !r.wu && isMaxTest(r);
     const rec = {
       exId: ex.id,
-      sess: W.sess,
-      wn: W.name,
-      pd: W.pd,
+      sess: workout.sess,
+      wn: workout.name,
+      pd: workout.pd,
       t: Date.now(),
       w: Math.round((+r.w || 0) * 100) / 100,
       r: r.r,
-      rir: hasR(r) ? +r.rir : null,
+      rir: hasRir(r) ? +r.rir : null,
       test,
     };
     if (r.wu) rec.wu = true;
-    if (ex.bwl && BWv()) rec.bw = BWv();
-    r.id = await put('sets', rec);
+    if (ex.bwl && bodyweight()) rec.bw = bodyweight();
+    r.id = await dbPut('sets', rec);
     r.done = true;
     delete r.adj;
-    if (it.mode == 'pct') await adjustPct(it, +s.dataset.j, ex);
-    else adjustNext(it, +s.dataset.j, ex);
-    saveW();
+    if (it.mode == 'pct') await adjustRemainingSetsPct(it, +s.dataset.j, ex);
+    else adjustRemainingSetsRir(it, +s.dataset.j, ex);
+    saveWorkout();
     startRest();
-    const x = info(r, ex),
-      pr = S.pr[ex.id];
+    const x = setInfo(r, ex),
+      pr = state.pr[ex.id];
     if (test) {
       const pb = ex.pb || 0,
         beat = r.w > pb;
-      if (beat) await put('exercises', { ...ex, pb: r.w });
+      if (beat) await dbPut('exercises', { ...ex, pb: r.w });
       if (
         confirm(
           `Save ${fmt(r.w)} as your current 1RM for ${ex.name}?` +
-            (pr ? `\nCurrent 1RM: ${fmt(pr.w)} (tested ${age(pr.t)})` : '') +
+            (pr ? `\nCurrent 1RM: ${fmt(pr.w)} (tested ${ageText(pr.t)})` : '') +
             (beat ? '\nNew lifetime PB!' : ''),
         )
       )
-        await put('pr_history', { exId: ex.id, w: r.w, t: rec.t, setId: r.id });
-      await load();
+        await dbPut('pr_history', { exId: ex.id, w: r.w, t: rec.t, setId: r.id });
+      await loadState();
     } else if (x.w) toast(`${x.s}. This e1RM is over 3% above your 1RM. Consider testing a new max.`);
     render();
   },
   mode: async (s, d) => {
-    const it = W.items[+d.i],
-      ex = EX(it.exId);
+    const it = workout.items[+d.i],
+      ex = exerciseById(it.exId);
     if (it.mode == d.m) return;
     if (d.m == 'pct' && !(it.ref > 0)) {
-      const ref = await refFor(ex);
+      const ref = await reference1RM(ex);
       if (!ref)
         return toast(
           `No 1RM for ${ex.name} yet. Add a tested 1RM in Exercises, or log a few RIR sets first.`,
@@ -353,107 +353,107 @@ const A = {
       it.refEst = ref.est;
     }
     it.mode = d.m;
-    saveW();
+    saveWorkout();
     render();
-    rememberMode(ex, d.m);
+    rememberTrackingMode(ex, d.m);
   },
   wu: async s => {
-    const r = W.items[s.dataset.i].rows[s.dataset.j];
+    const r = workout.items[s.dataset.i].rows[s.dataset.j];
     r.wu = !r.wu;
     if (!r.wu) delete r.wu;
     if (r.done && r.id) {
-      const x = await rq(st('sets').get(r.id));
+      const x = await request(store('sets').get(r.id));
       if (x) {
         if (r.wu) {
           x.wu = true;
           x.test = false;
         } else {
           delete x.wu;
-          x.test = isTest(x);
+          x.test = isMaxTest(x);
         }
-        await put('sets', x);
+        await dbPut('sets', x);
       }
     }
-    saveW();
+    saveWorkout();
     render();
   },
   undo: async s => {
-    const r = W.items[s.dataset.i].rows[s.dataset.j];
-    if (r.id) await del('sets', r.id);
+    const r = workout.items[s.dataset.i].rows[s.dataset.j];
+    if (r.id) await dbDelete('sets', r.id);
     r.done = false;
     delete r.id;
-    saveW();
+    saveWorkout();
     render();
   },
   settings: () => {
-    PICK = null;
-    S.view = { t: 'set' };
+    picker = null;
+    state.view = { t: 'set' };
     render();
   },
   exNew: () => {
-    E = { name: '', mode: 'rir', inc: 2, lo: 8, hi: 12, rir: 2 };
-    S.prl = [];
-    S.hist = [];
-    S.view = { t: 'exd' };
+    draft = { name: '', mode: 'rir', inc: 2, lo: 8, hi: 12, rir: 2 };
+    state.prl = [];
+    state.hist = [];
+    state.view = { t: 'exd' };
     render();
   },
   exOpen: async (s, d) => {
-    E = structuredClone(EX(+d.i));
-    S.view = { t: 'exd' };
-    await loadEx(E.id);
+    draft = structuredClone(exerciseById(+d.i));
+    state.view = { t: 'exd' };
+    await openExerciseHistory(draft.id);
   },
   exSave: async () => {
-    if (!E.name.trim()) return toast('Name required');
-    E.inc = +E.inc || 0;
-    if (E.inc < 0) return toast("Increment can't be negative");
-    E.mode = E.mode == 'pct' ? 'pct' : 'rir';
-    if (E.bwl) E.bwl = true;
-    else delete E.bwl;
-    E.lo ||= 8;
-    E.hi ||= Math.max(E.lo, 12);
-    E.rir ??= 2;
-    if (E.hi < E.lo) return toast('Reps max must be at least reps min');
-    E.wu = Math.min(4, Math.max(0, Math.round(+E.wu || 0)));
-    if (!E.wu) delete E.wu;
-    const cur = +E.cur || 0;
-    delete E.cur;
-    if (E.pb === '' || E.pb == null || !(+E.pb > 0)) delete E.pb;
-    else E.pb = +E.pb;
-    if (cur > 0 && !(E.pb >= cur)) E.pb = cur; // PB can't be below your current 1RM
-    const id = await put('exercises', E);
-    if (cur > 0 && cur !== S.pr[id]?.w) await put('pr_history', { exId: id, w: cur, t: Date.now() });
-    await load();
-    back();
+    if (!draft.name.trim()) return toast('Name required');
+    draft.inc = +draft.inc || 0;
+    if (draft.inc < 0) return toast("Increment can't be negative");
+    draft.mode = draft.mode == 'pct' ? 'pct' : 'rir';
+    if (draft.bwl) draft.bwl = true;
+    else delete draft.bwl;
+    draft.lo ||= 8;
+    draft.hi ||= Math.max(draft.lo, 12);
+    draft.rir ??= 2;
+    if (draft.hi < draft.lo) return toast('Reps max must be at least reps min');
+    draft.wu = Math.min(4, Math.max(0, Math.round(+draft.wu || 0)));
+    if (!draft.wu) delete draft.wu;
+    const cur = +draft.cur || 0;
+    delete draft.cur;
+    if (draft.pb === '' || draft.pb == null || !(+draft.pb > 0)) delete draft.pb;
+    else draft.pb = +draft.pb;
+    if (cur > 0 && !(draft.pb >= cur)) draft.pb = cur; // PB can't be below your current 1RM
+    const id = await dbPut('exercises', draft);
+    if (cur > 0 && cur !== state.pr[id]?.w) await dbPut('pr_history', { exId: id, w: cur, t: Date.now() });
+    await loadState();
+    closePage();
   },
   exDel: async () => {
     if (!confirm('Delete exercise with its PRs and set history?')) return;
-    for (const s of await all('sets', 'ex', E.id)) await del('sets', s.id);
-    for (const p of await all('pr_history', 'ex', E.id)) await del('pr_history', p.id);
-    await del('exercises', E.id);
-    await load();
-    back();
+    for (const s of await getAll('sets', 'ex', draft.id)) await dbDelete('sets', s.id);
+    for (const p of await getAll('pr_history', 'ex', draft.id)) await dbDelete('pr_history', p.id);
+    await dbDelete('exercises', draft.id);
+    await loadState();
+    closePage();
   },
   prAdd: async () => {
     const w = +$('#prw').value,
       d = $('#prd').value;
     if (!(w > 0)) return toast('Enter the tested weight');
-    await put('pr_history', { exId: E.id, w, t: new Date(d + 'T12:00').getTime() });
-    const ex = EX(E.id);
-    if (ex && w > (ex.pb || 0)) await put('exercises', { ...ex, pb: w });
-    await loadEx(E.id);
-    E.pb = EX(E.id)?.pb;
-    E.cur = S.pr[E.id]?.w ?? '';
+    await dbPut('pr_history', { exId: draft.id, w, t: new Date(d + 'T12:00').getTime() });
+    const ex = exerciseById(draft.id);
+    if (ex && w > (ex.pb || 0)) await dbPut('exercises', { ...ex, pb: w });
+    await openExerciseHistory(draft.id);
+    draft.pb = exerciseById(draft.id)?.pb;
+    draft.cur = state.pr[draft.id]?.w ?? '';
     render();
   },
   prDel: async (s, d) => {
-    await del('pr_history', +d.i);
-    await loadEx(E.id);
-    E.cur = S.pr[E.id]?.w ?? '';
+    await dbDelete('pr_history', +d.i);
+    await openExerciseHistory(draft.id);
+    draft.cur = state.pr[draft.id]?.w ?? '';
     render();
   },
   calnav: (s, d) => {
-    let m = CAL.m + +d.d,
-      y = CAL.y;
+    let m = calendar.m + +d.d,
+      y = calendar.y;
     if (m < 0) {
       m = 11;
       y--;
@@ -461,50 +461,50 @@ const A = {
       m = 0;
       y++;
     }
-    CAL.m = m;
-    CAL.y = y;
-    CAL.sel = null;
+    calendar.m = m;
+    calendar.y = y;
+    calendar.sel = null;
     render();
   },
   caltoday: () => {
     const n = new Date();
-    CAL.y = n.getFullYear();
-    CAL.m = n.getMonth();
-    CAL.sel = null;
+    calendar.y = n.getFullYear();
+    calendar.m = n.getMonth();
+    calendar.sel = null;
     render();
   },
   calday: (s, d) => {
-    CAL.sel = CAL.sel == d.k ? null : d.k;
+    calendar.sel = calendar.sel == d.k ? null : d.k;
     render();
   },
-  wedOpen: (s, d) => wedOpen(+d.i),
+  wedOpen: (s, d) => openWorkoutEditor(+d.i),
   wedCancel: () => {
-    WE = null;
-    back();
+    editedWorkout = null;
+    closePage();
   },
-  wedSave: () => wedSave(),
+  wedSave: () => saveEditedWorkout(),
   wedRm: (s, d) => {
-    WE.items[+d.k].rows.splice(+d.j, 1);
+    editedWorkout.items[+d.k].rows.splice(+d.j, 1);
     render();
   },
   wedWu: (s, d) => {
-    const r = WE.items[+d.k].rows[+d.j];
+    const r = editedWorkout.items[+d.k].rows[+d.j];
     r.wu = !r.wu;
     render();
   },
   wedRmx: (s, d) => {
-    WE.items.splice(+d.k, 1);
+    editedWorkout.items.splice(+d.k, 1);
     render();
   },
   wedAddSet: (s, d) => {
-    const rs = WE.items[+d.k].rows,
+    const rs = editedWorkout.items[+d.k].rows,
       l = rs.filter(x => !x.wu).pop() || rs[rs.length - 1] || {};
     rs.push({ w: l.w ?? '', r: l.r ?? '', rir: l.rir ?? '', wu: false });
     render();
   },
   wedAdd: (s, d) => {
-    WE.items.push({ exId: +d.x, rows: [{ w: '', r: '', rir: '', wu: false }] });
-    WQ = '';
+    editedWorkout.items.push({ exId: +d.x, rows: [{ w: '', r: '', rir: '', wu: false }] });
+    editorAddQuery = '';
     render();
     const q = $('#wq');
     if (q) {
@@ -512,49 +512,49 @@ const A = {
     }
   },
   wedAddNew: async () => {
-    const id = await newEx($('#wq').value);
-    if (id) A.wedAdd(null, { x: id });
+    const id = await createExercise($('#wq').value);
+    if (id) actions.wedAdd(null, { x: id });
   },
   wdel: async (s, d) => {
     if (!confirm('Delete this workout?')) return;
-    for (const x of S.sets.filter(x => x.sess == d.i)) await del('sets', x.id);
-    await load();
+    for (const x of state.sets.filter(x => x.sess == d.i)) await dbDelete('sets', x.id);
+    await loadState();
     render();
   },
   sdel: async (s, d) => {
-    await del('sets', +d.i);
-    await loadEx(E.id);
+    await dbDelete('sets', +d.i);
+    await openExerciseHistory(draft.id);
   },
   tplNew: () => {
-    TQ = { k: null, q: '' };
-    TR = null;
-    E = { name: '', weeks: 8, days: [{ name: 'Day 1', items: [] }] };
-    S.view = { t: 'tple' };
+    planAddSearch = { k: null, q: '' };
+    planReplace = null;
+    draft = { name: '', weeks: 8, days: [{ name: 'Day 1', items: [] }] };
+    state.view = { t: 'tple' };
     render();
   },
   tplEdit: (s, d) => {
-    TQ = { k: null, q: '' };
-    TR = null;
-    E = structuredClone(S.tpl.find(t => t.id == d.i));
-    S.view = { t: 'tple' };
+    planAddSearch = { k: null, q: '' };
+    planReplace = null;
+    draft = structuredClone(state.tpl.find(t => t.id == d.i));
+    state.view = { t: 'tple' };
     render();
   },
   tplAdd: (s, d) => {
-    if (!S.ex.length) return toast('Create an exercise first');
-    E.days[+d.i].items.push({ exId: S.ex[0].id, n: 3, text: '' });
+    if (!state.ex.length) return toast('Create an exercise first');
+    draft.days[+d.i].items.push({ exId: state.ex[0].id, n: 3, text: '' });
     render();
   },
   tplDelItem: (s, d) => {
-    E.days[+d.k].items.splice(+d.i, 1);
+    draft.days[+d.k].items.splice(+d.i, 1);
     render();
   },
   tplSave: async () => {
-    if (!E.name.trim()) return toast('Name required');
-    E.weeks = Math.min(52, Math.max(1, Math.round(+E.weeks || 8)));
-    for (const dy of E.days) {
+    if (!draft.name.trim()) return toast('Name required');
+    draft.weeks = Math.min(52, Math.max(1, Math.round(+draft.weeks || 8)));
+    for (const dy of draft.days) {
       if (!dy.name.trim()) dy.name = 'Day';
       for (const it of dy.items) {
-        const x = EX(it.exId),
+        const x = exerciseById(it.exId),
           nm = x?.name || 'an exercise';
         delete it.text;
         if (it.mode != 'pct') {
@@ -563,7 +563,9 @@ const A = {
           it.n = Math.round(+pk(it.n, 3));
           it.lo = Math.round(+pk(it.lo, x?.lo ?? 8));
           it.hi = Math.round(+pk(it.hi, x?.hi ?? 12));
-          it.rirW = rirWeeks(it, E.weeks, x).map(v => (v === '' || v == null ? (x?.rir ?? 2) : +v));
+          it.rirW = weeklyRirTargets(it, draft.weeks, x).map(v =>
+            v === '' || v == null ? (x?.rir ?? 2) : +v,
+          );
           delete it.rir;
           if (!(it.n >= 1 && it.n <= 20 && it.lo >= 1 && it.hi >= it.lo && it.hi <= 50))
             return toast(`Check ${nm}: sets 1–20, and reps min ≤ reps max`);
@@ -581,15 +583,15 @@ const A = {
         }
       }
     }
-    await put('templates', E);
-    await load();
-    back();
+    await dbPut('templates', draft);
+    await loadState();
+    closePage();
   },
   tplDel: async () => {
     if (confirm('Delete this plan?')) {
-      await del('templates', E.id);
-      await load();
-      back();
+      await dbDelete('templates', draft.id);
+      await loadState();
+      closePage();
     }
   },
 };

@@ -2,7 +2,7 @@
    Old unprefixed keys are moved once. Keys whose content proves they're Lift Log's (workout in progress, backup
    settings) are removed afterwards; generic ones (rest, bw, lb, dirty) are copied only if they look valid, and
    left in place because another app might own a key with the same name. */
-const LSP = 'lift-log:';
+const LS_PREFIX = 'lift-log:';
 (() => {
   try {
     const L = localStorage,
@@ -34,32 +34,32 @@ const LSP = 'lift-log:';
       };
     for (const k of [...Object.keys(sure), ...Object.keys(looks)]) {
       const v = L.getItem(k);
-      if (v == null || L.getItem(LSP + k) != null) continue;
+      if (v == null || L.getItem(LS_PREFIX + k) != null) continue;
       if (sure[k]) {
         if (sure[k](v)) {
-          L.setItem(LSP + k, v);
+          L.setItem(LS_PREFIX + k, v);
           L.removeItem(k);
         }
-      } else if (looks[k](v)) L.setItem(LSP + k, v);
+      } else if (looks[k](v)) L.setItem(LS_PREFIX + k, v);
     }
   } catch {}
 })();
-let bt;
-const ls = (k, v) => {
+let backupTimer;
+const lsSet = (k, v) => {
   try {
-    localStorage.setItem(LSP + k, v);
+    localStorage.setItem(LS_PREFIX + k, v);
   } catch {}
 };
-const lg = k => {
+const lsGet = k => {
   try {
-    return localStorage.getItem(LSP + k);
+    return localStorage.getItem(LS_PREFIX + k);
   } catch {
     return null;
   }
 };
 /* ---------- IndexedDB ---------- */
 let db;
-const open = () =>
+const openDatabase = () =>
   new Promise((res, rej) => {
     const r = indexedDB.open('liftlog', 1);
     r.onupgradeneeded = () => {
@@ -73,15 +73,15 @@ const open = () =>
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
-const rq = r =>
+const request = r =>
   new Promise((res, rej) => {
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
-const st = (n, m = 'readonly') => db.transaction(n, m).objectStore(n);
-const all = (n, ix, k) =>
-  rq(ix ? st(n).index(ix).getAll(k) : st(n).getAll()).then(a =>
+const store = (n, m = 'readonly') => db.transaction(n, m).objectStore(n);
+const getAll = (n, ix, k) =>
+  request(ix ? store(n).index(ix).getAll(k) : store(n).getAll()).then(a =>
     n == 'sets' ? a.map(s => (s.rir > 10 ? { ...s, rir: null } : s)) : a,
   ); // RIR above 10 is treated as 'not tracked'
-const put = (n, o) => (touch(), rq(st(n, 'readwrite').put(o)));
-const del = (n, id) => (touch(), rq(st(n, 'readwrite').delete(id)));
+const dbPut = (n, o) => (markDataChanged(), request(store(n, 'readwrite').put(o)));
+const dbDelete = (n, id) => (markDataChanged(), request(store(n, 'readwrite').delete(id)));

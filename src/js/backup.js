@@ -1,6 +1,6 @@
-function lastBackup() {
+function lastBackupTime() {
   try {
-    return +localStorage.getItem(LSP + 'lb') || 0;
+    return +localStorage.getItem(LS_PREFIX + 'lb') || 0;
   } catch {
     return 0;
   }
@@ -9,9 +9,9 @@ function lastBackup() {
 const STORES = ['exercises', 'templates', 'pr_history', 'sets'];
 async function exportData() {
   const d = { app: 'liftlog', v: 1, t: Date.now() };
-  for (const n of STORES) d[n] = await all(n);
-  d.bw = BWv() || undefined;
-  d.ht = HTv() || undefined;
+  for (const n of STORES) d[n] = await getAll(n);
+  d.bw = bodyweight() || undefined;
+  d.ht = height() || undefined;
   const name = `liftlog-${new Date().toISOString().slice(0, 10)}.json`,
     f = new File([JSON.stringify(d)], name, { type: 'application/json' });
   try {
@@ -25,13 +25,13 @@ async function exportData() {
     a.click();
   }
   try {
-    localStorage.setItem(LSP + 'lb', Date.now());
+    localStorage.setItem(LS_PREFIX + 'lb', Date.now());
   } catch {}
   toast('Backup exported');
   render();
 }
 /* ---------- import validation: rebuild every record from known fields only ---------- */
-function clean(d) {
+function sanitizeBackup(d) {
   const num = (x, k) => {
       if (typeof x != 'number' || !isFinite(x)) throw new Error('bad ' + k);
       return x;
@@ -125,73 +125,76 @@ async function importData(f) {
 }
 async function applyBackup(d) {
   try {
-    d = clean(d);
+    d = sanitizeBackup(d);
   } catch (e) {
     toast('Backup file is invalid (' + e.message + '). Nothing was changed.');
     return false;
   }
   if (
     !confirm(
-      `Replace ALL current data with the backup from ${dstr(d.t)}? (${d.sets.length} sets, ${d.exercises.length} exercises)`,
+      `Replace ALL current data with the backup from ${dateText(d.t)}? (${d.sets.length} sets, ${d.exercises.length} exercises)`,
     )
   )
     return false;
   for (const n of STORES) {
-    await rq(st(n, 'readwrite').clear());
-    for (const o of d[n]) await put(n, o);
+    await request(store(n, 'readwrite').clear());
+    for (const o of d[n]) await dbPut(n, o);
   }
-  if (d.bw > 0) ls('bw', d.bw);
-  if (d.ht >= 100 && d.ht <= 250) ls('ht', d.ht);
-  W = null;
-  saveW();
-  S.view = null;
-  E = null;
-  await load();
+  if (d.bw > 0) lsSet('bw', d.bw);
+  if (d.ht >= 100 && d.ht <= 250) lsSet('ht', d.ht);
+  workout = null;
+  saveWorkout();
+  state.view = null;
+  draft = null;
+  await loadState();
   render();
   toast('Backup restored');
   return true;
 }
 
 /* ---------- automatic backup to a private GitHub repo ---------- */
-const ghCfg = () => {
+const githubConfig = () => {
   try {
-    return JSON.parse(lg('gh') || 'null');
+    return JSON.parse(lsGet('gh') || 'null');
   } catch {
     return null;
   }
 };
-const ghUrl = g => `https://api.github.com/repos/${g.repo}/contents/liftlog-backup.json`;
-const ghH = (g, a = 'application/vnd.github+json') => ({ Authorization: 'Bearer ' + g.token, Accept: a });
-function touch() {
-  ls('dirty', '1');
-  clearTimeout(bt);
-  bt = setTimeout(autoBackup, 15000);
+const githubFileUrl = g => `https://api.github.com/repos/${g.repo}/contents/liftlog-backup.json`;
+const githubHeaders = (g, a = 'application/vnd.github+json') => ({
+  Authorization: 'Bearer ' + g.token,
+  Accept: a,
+});
+function markDataChanged() {
+  lsSet('dirty', '1');
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(autoBackup, 15000);
 }
-let pq = Promise.resolve();
-const ghPush = g =>
-  (pq = pq
+let pushQueue = Promise.resolve();
+const githubPush = g =>
+  (pushQueue = pushQueue
     .catch(() => {})
     .then(async () => {
       try {
-        return await ghPush1(g);
+        return await githubPushOnce(g);
       } catch (e) {
-        if (/ 409| 422/.test(e.message)) return await ghPush1(g);
+        if (/ 409| 422/.test(e.message)) return await githubPushOnce(g);
         throw e;
       }
     }));
-async function ghPush1(g) {
+async function githubPushOnce(g) {
   let sha;
-  const r0 = await fetch(ghUrl(g), { headers: ghH(g), cache: 'no-store' });
+  const r0 = await fetch(githubFileUrl(g), { headers: githubHeaders(g), cache: 'no-store' });
   if (r0.ok) sha = (await r0.json()).sha;
   else if (r0.status != 404) throw new Error('GitHub error ' + r0.status);
   const d = { app: 'liftlog', v: 1, t: Date.now() };
-  for (const n of STORES) d[n] = await all(n);
-  d.bw = BWv() || undefined;
-  d.ht = HTv() || undefined;
-  const r = await fetch(ghUrl(g), {
+  for (const n of STORES) d[n] = await getAll(n);
+  d.bw = bodyweight() || undefined;
+  d.ht = height() || undefined;
+  const r = await fetch(githubFileUrl(g), {
     method: 'PUT',
     cache: 'no-store',
-    headers: ghH(g),
+    headers: githubHeaders(g),
     body: JSON.stringify({
       message: 'Lift Log backup',
       content: btoa(unescape(encodeURIComponent(JSON.stringify(d)))),
@@ -200,51 +203,54 @@ async function ghPush1(g) {
   });
   if (!r.ok)
     throw new Error('GitHub error ' + r.status + (r.status == 422 ? ' (stale file version, try again)' : ''));
-  ls('lb', Date.now());
-  ls('dirty', '0');
-  ls('gherr', '');
+  lsSet('lb', Date.now());
+  lsSet('dirty', '0');
+  lsSet('gherr', '');
 }
-async function ghPull(g) {
-  const r = await fetch(ghUrl(g), { headers: ghH(g, 'application/vnd.github.raw+json'), cache: 'no-store' });
+async function githubPull(g) {
+  const r = await fetch(githubFileUrl(g), {
+    headers: githubHeaders(g, 'application/vnd.github.raw+json'),
+    cache: 'no-store',
+  });
   if (r.status == 404) return null;
   if (!r.ok) throw new Error('GitHub error ' + r.status);
   return JSON.parse(await r.text());
 }
 async function autoBackup() {
-  const g = ghCfg();
-  if (!g || !navigator.onLine || (!S.ex.length && !S.sets.length)) return;
+  const g = githubConfig();
+  if (!g || !navigator.onLine || (!state.ex.length && !state.sets.length)) return;
   try {
-    await ghPush(g);
+    await githubPush(g);
   } catch (e) {
-    ls('gherr', 'Last automatic backup failed: ' + e.message);
+    lsSet('gherr', 'Last automatic backup failed: ' + e.message);
   }
-  if (S.view?.t == 'set') render();
+  if (state.view?.t == 'set') render();
 }
-const DEFREPO = 'Germani144/lift-log-data';
-function ghCard() {
-  const g = ghCfg(),
-    lb = lastBackup(),
-    er = lg('gherr');
+const DEFAULT_BACKUP_REPO = 'Germani144/lift-log-data';
+function githubBackupCard() {
+  const g = githubConfig(),
+    lb = lastBackupTime(),
+    er = lsGet('gherr');
   return (
     `<div class=card><b>Automatic backup (GitHub)</b>` +
     (g
-      ? `<div class=m>On → ${esc(g.repo)}. Saves a few seconds after each change${lb ? '. Last backup ' + age(lb) : ''}.</div>${er ? `<div class=wr>${esc(er)}</div>` : ''}<div class=row><button class=b data-a=ghNow>Back up now</button><button class=b data-a=ghRestore>Restore</button><button class=b data-a=ghOff>Turn off</button></div>`
-      : `<div class=m>Use a <b>private</b> repo just for backups and a fine-grained token limited to that repo with Contents: read and write. Don't use your Pages repo.</div><form id=ghf><input name=username autocomplete=username value="${esc(DEFREPO)}" hidden><label>Repo<input id=ghr value="${esc(DEFREPO)}" autocapitalize=off></label><label>Token<input id=ght name=password type=password autocomplete=current-password></label><button class="b p" type=submit>Turn on</button></form>`) +
+      ? `<div class=m>On → ${esc(g.repo)}. Saves a few seconds after each change${lb ? '. Last backup ' + ageText(lb) : ''}.</div>${er ? `<div class=wr>${esc(er)}</div>` : ''}<div class=row><button class=b data-a=ghNow>Back up now</button><button class=b data-a=ghRestore>Restore</button><button class=b data-a=ghOff>Turn off</button></div>`
+      : `<div class=m>Use a <b>private</b> repo just for backups and a fine-grained token limited to that repo with Contents: read and write. Don't use your Pages repo.</div><form id=ghf><input name=username autocomplete=username value="${esc(DEFAULT_BACKUP_REPO)}" hidden><label>Repo<input id=ghr value="${esc(DEFAULT_BACKUP_REPO)}" autocapitalize=off></label><label>Token<input id=ght name=password type=password autocomplete=current-password></label><button class="b p" type=submit>Turn on</button></form>`) +
     `</div>`
   );
 }
-Object.assign(A, {
+Object.assign(actions, {
   ghSave: async () => {
     const repo = $('#ghr').value.trim(),
       token = $('#ght').value.trim();
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !token) return toast('Enter the repo as owner/name and a token');
     const g = { repo, token };
     try {
-      const empty = !S.ex.length && !S.sets.length,
-        rem = empty ? await ghPull(g) : null;
-      ls('gh', JSON.stringify(g));
+      const empty = !state.ex.length && !state.sets.length,
+        rem = empty ? await githubPull(g) : null;
+      lsSet('gh', JSON.stringify(g));
       if (rem) await applyBackup(rem);
-      else if (!empty) await ghPush(g);
+      else if (!empty) await githubPush(g);
       toast('Automatic backup is on');
       render();
     } catch (e) {
@@ -253,25 +259,25 @@ Object.assign(A, {
   },
   ghNow: async () => {
     try {
-      await ghPush(ghCfg());
+      await githubPush(githubConfig());
       toast('Backed up');
     } catch (e) {
-      ls('gherr', 'Last automatic backup failed: ' + e.message);
+      lsSet('gherr', 'Last automatic backup failed: ' + e.message);
       toast(e.message);
     }
     render();
   },
   ghRestore: async () => {
     try {
-      const d = await ghPull(ghCfg());
+      const d = await githubPull(githubConfig());
       d ? await applyBackup(d) : toast('No backup found in that repo');
     } catch (e) {
       toast(e.message);
     }
   },
   ghOff: () => {
-    ls('gh', '');
+    lsSet('gh', '');
     render();
   },
 });
-addEventListener('online', () => ghCfg() && autoBackup());
+addEventListener('online', () => githubConfig() && autoBackup());

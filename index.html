@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-5NoI+k9DDan38uf0dCSZwpnL29nN7UNL3ZHv03IEvno='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-2ovEd7svO1aLMPqd73VixsOVOPzh2HV1/qWo8l68p4s='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -1087,36 +1087,36 @@ nav button.nx {
 </style></head>
 <body><div id="splash" aria-hidden="true"><img src="icon-192.png" width="132" height="132" alt=""><b>Lift Log</b><span id="sver"></span><div class="bb"><i class="pl pb"></i><i class="pl pr"></i><i class="sl"></i><div class="shaft"><i></i><i></i><i></i><i></i><i></i></div><i class="sl"></i><i class="pl pr"></i><i class="pl pb"></i></div></div><div id="app"></div><div id="toast" hidden></div>
 <script>
-const VER='2.11'; // app version, bumped automatically by tools/build.py on every change
+const VER='2.12'; // app version, bumped automatically by tools/build.py on every change
 const $ = (s, e = document) => e.querySelector(s),
   app = $('#app');
 const esc = s =>
   String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const scTo = (x, y) => {
+const scrollMainTo = (x, y) => {
     const m = $('main');
     if (m) m.scrollTop = y;
   },
-  scY = () => $('main')?.scrollTop || 0; // the page scrolls inside <main>, not the window
+  mainScrollY = () => $('main')?.scrollTop || 0; // the page scrolls inside <main>, not the window
 const fmt = x => (x === '' || x == null || isNaN(x) ? '' : +(+x).toFixed(2));
-const age = t => {
+const ageText = t => {
   const d = Math.floor((Date.now() - t) / 864e5);
   return d < 1 ? 'today' : d < 60 ? d + 'd ago' : Math.round(d / 30.4) + 'mo ago';
 };
-const dstr = t =>
+const dateText = t =>
   new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-let tt;
+let toastTimer;
 const toast = m => {
   const t = $('#toast');
   t.textContent = m;
   t.hidden = false;
-  clearTimeout(tt);
-  tt = setTimeout(() => (t.hidden = true), 4000);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), 4000);
 };
 /* All of Germani144's apps share this origin's localStorage, so every Lift Log key starts with "lift-log:".
    Old unprefixed keys are moved once. Keys whose content proves they're Lift Log's (workout in progress, backup
    settings) are removed afterwards; generic ones (rest, bw, lb, dirty) are copied only if they look valid, and
    left in place because another app might own a key with the same name. */
-const LSP = 'lift-log:';
+const LS_PREFIX = 'lift-log:';
 (() => {
   try {
     const L = localStorage,
@@ -1148,32 +1148,32 @@ const LSP = 'lift-log:';
       };
     for (const k of [...Object.keys(sure), ...Object.keys(looks)]) {
       const v = L.getItem(k);
-      if (v == null || L.getItem(LSP + k) != null) continue;
+      if (v == null || L.getItem(LS_PREFIX + k) != null) continue;
       if (sure[k]) {
         if (sure[k](v)) {
-          L.setItem(LSP + k, v);
+          L.setItem(LS_PREFIX + k, v);
           L.removeItem(k);
         }
-      } else if (looks[k](v)) L.setItem(LSP + k, v);
+      } else if (looks[k](v)) L.setItem(LS_PREFIX + k, v);
     }
   } catch {}
 })();
-let bt;
-const ls = (k, v) => {
+let backupTimer;
+const lsSet = (k, v) => {
   try {
-    localStorage.setItem(LSP + k, v);
+    localStorage.setItem(LS_PREFIX + k, v);
   } catch {}
 };
-const lg = k => {
+const lsGet = k => {
   try {
-    return localStorage.getItem(LSP + k);
+    return localStorage.getItem(LS_PREFIX + k);
   } catch {
     return null;
   }
 };
 /* ---------- IndexedDB ---------- */
 let db;
-const open = () =>
+const openDatabase = () =>
   new Promise((res, rej) => {
     const r = indexedDB.open('liftlog', 1);
     r.onupgradeneeded = () => {
@@ -1187,50 +1187,51 @@ const open = () =>
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
-const rq = r =>
+const request = r =>
   new Promise((res, rej) => {
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
-const st = (n, m = 'readonly') => db.transaction(n, m).objectStore(n);
-const all = (n, ix, k) =>
-  rq(ix ? st(n).index(ix).getAll(k) : st(n).getAll()).then(a =>
+const store = (n, m = 'readonly') => db.transaction(n, m).objectStore(n);
+const getAll = (n, ix, k) =>
+  request(ix ? store(n).index(ix).getAll(k) : store(n).getAll()).then(a =>
     n == 'sets' ? a.map(s => (s.rir > 10 ? { ...s, rir: null } : s)) : a,
   ); // RIR above 10 is treated as 'not tracked'
-const put = (n, o) => (touch(), rq(st(n, 'readwrite').put(o)));
-const del = (n, id) => (touch(), rq(st(n, 'readwrite').delete(id)));
+const dbPut = (n, o) => (markDataChanged(), request(store(n, 'readwrite').put(o)));
+const dbDelete = (n, id) => (markDataChanged(), request(store(n, 'readwrite').delete(id)));
 /* ---------- math ---------- */
-const pct = (r, rir) => 1 / (1 + (r + rir) / 30); // %1RM from reps + RIR
-const e1 = (w, r, rir) => w / pct(r, rir);
-const hasR = r => r.rir !== '' && r.rir != null && +r.rir >= 0 && +r.rir <= 10;
-const isTest = r => +r.r === 1 && hasR(r) && +r.rir === 0; // 1 rep at 0 RIR counts as a 1RM
-const rnd = (x, i) => (i > 0 ? +(Math.round(x / i) * i).toFixed(3) : +(+x).toFixed(2)); // increment 0 = no rounding (bodyweight)
-const wt = w => (w > 0 ? fmt(w) : 'BW');
+const fractionOf1RM = (r, rir) => 1 / (1 + (r + rir) / 30); // %1RM from reps + RIR
+const estimate1RM = (w, r, rir) => w / fractionOf1RM(r, rir);
+const hasRir = r => r.rir !== '' && r.rir != null && +r.rir >= 0 && +r.rir <= 10;
+const isMaxTest = r => +r.r === 1 && hasRir(r) && +r.rir === 0; // 1 rep at 0 RIR counts as a 1RM
+const roundToStep = (x, i) => (i > 0 ? +(Math.round(x / i) * i).toFixed(3) : +(+x).toFixed(2)); // increment 0 = no rounding (bodyweight)
+const weightLabel = w => (w > 0 ? fmt(w) : 'BW');
 
 /* Bodyweight lifts (pull-ups, dips…): with "Load includes bodyweight" on, the maths uses you + the plate,
    while you always type and see only the added kg. Each logged set remembers your bodyweight at the time. */
-const BWv = () => +lg('bw') || 0,
-  HTv = () => +lg('ht') || 0,
-  bwo = ex => (ex?.bwl ? BWv() : 0);
-const tot = (ex, s) => (ex?.bwl ? { ...s, w: (s.w === '' || s.w == null ? 0 : +s.w) + (s.bw ?? BWv()) } : s); // a set in total-load space
-const outW = (ex, v) => {
+const bodyweight = () => +lsGet('bw') || 0,
+  height = () => +lsGet('ht') || 0,
+  bodyweightFor = ex => (ex?.bwl ? bodyweight() : 0);
+const withBodyweight = (ex, s) =>
+  ex?.bwl ? { ...s, w: (s.w === '' || s.w == null ? 0 : +s.w) + (s.bw ?? bodyweight()) } : s; // a set in total-load space
+const toLoadedWeight = (ex, v) => {
   if (ex?.bwl) {
-    const a = rnd(+v - BWv(), ex.inc);
+    const a = roundToStep(+v - bodyweight(), ex.inc);
     return a > 0 ? a : '';
   }
-  return v > 0 ? rnd(v, ex.inc) : '';
+  return v > 0 ? roundToStep(v, ex.inc) : '';
 }; // total load -> what you load ('' = bodyweight / no suggestion)
 /* RIR is picked from a list: 0–5 in half steps, plus "5+" (stored as 6). A 5+ set stays in history and volume
    but, like a warm-up, never feeds suggestions, the strength estimate or the next-set adjustment. */
-const RIRS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6];
-const rirTxt = v => (v == null || v === '' ? '' : +v > 5 ? '5+' : fmt(v)),
-  rpeTxt = v => (v == null || v === '' ? '' : +v > 5 ? '<5' : fmt(10 - v));
+const RIR_CHOICES = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6];
+const rirLabel = v => (v == null || v === '' ? '' : +v > 5 ? '5+' : fmt(v)),
+  rpeLabel = v => (v == null || v === '' ? '' : +v > 5 ? '<5' : fmt(10 - v));
 // How strong a lift has been lately vs. its longer-run level, at a similar rep count: recent 3 sessions vs. the last 10. Used to nudge planned % sets (max ±10%).
-function trend(ss, r) {
+function strengthTrend(ss, r) {
   const by = new Map();
   for (const s of ss)
-    if (isWork(s) && Math.abs(s.r - r) <= 1)
-      by.set(s.sess, Math.max(by.get(s.sess) || 0, e1(s.w, s.r, s.rir)));
+    if (isWorkingSet(s) && Math.abs(s.r - r) <= 1)
+      by.set(s.sess, Math.max(by.get(s.sess) || 0, estimate1RM(s.w, s.r, s.rir)));
   const v = [...by.values()];
   if (v.length < 2) return 1;
   const rc = v.slice(-3);
@@ -1245,14 +1246,14 @@ function trend(ss, r) {
   return Math.min(1.1, Math.max(0.9, a / b / mean));
 }
 // Reference 1RM for % view: your tested 1RM, or else the estimate from recent working sets.
-async function refFor(ex) {
-  const p = S.pr[ex.id];
-  if (p) return { w: p.w + bwo(ex), est: false };
-  const ss = (await all('sets', 'ex', ex.id))
+async function reference1RM(ex) {
+  const p = state.pr[ex.id];
+  if (p) return { w: p.w + bodyweightFor(ex), est: false };
+  const ss = (await getAll('sets', 'ex', ex.id))
       .filter(s => !s.wu)
       .sort((a, b) => a.t - b.t)
-      .map(s => tot(ex, s)),
-    E = strength(ss, -99, 999);
+      .map(s => withBodyweight(ex, s)),
+    E = estimateStrength(ss, -99, 999);
   return E ? { w: Math.round(E * 10) / 10, est: true } : null;
 }
 
@@ -1263,12 +1264,13 @@ async function refFor(ex) {
  Strength = estimated 1RM averaged over your last 4 sessions (recent ones count more), from working sets only:
  not warm-ups, RIR known and under 5. Sets in a rep range close to today's target are preferred, so a heavy-triple
  day doesn't inflate a light-day suggestion. Weight and reps then come from that strength number and the target. */
-const isWork = s => !s.wu && s.rir != null && s.rir < 5 && s.w > 0;
-function strength(ss, lo, hi) {
+const isWorkingSet = s => !s.wu && s.rir != null && s.rir < 5 && s.w > 0;
+function estimateStrength(ss, lo, hi) {
   const est = f => {
     const by = new Map();
     for (const s of ss)
-      if (isWork(s) && f(s)) by.set(s.sess, Math.max(by.get(s.sess) || 0, e1(s.w, s.r, s.rir)));
+      if (isWorkingSet(s) && f(s))
+        by.set(s.sess, Math.max(by.get(s.sess) || 0, estimate1RM(s.w, s.r, s.rir)));
     const v = [...by.values()].slice(-4);
     if (!v.length) return null;
     let a = 0,
@@ -1282,7 +1284,7 @@ function strength(ss, lo, hi) {
   };
   return est(s => s.r >= lo - 3 && s.r <= hi + 3) ?? est(() => true);
 }
-const RAMP = {
+const WARMUP_RAMP = {
   1: [[0.6, 5]],
   2: [
     [0.5, 8],
@@ -1300,16 +1302,16 @@ const RAMP = {
     [0.85, 2],
   ],
 }; // warm-up % of working weight, reps
-async function suggest(ex, n) {
-  const ss = (await all('sets', 'ex', ex.id)).filter(s => !s.wu).sort((a, b) => a.t - b.t),
+async function suggestSets(ex, n) {
+  const ss = (await getAll('sets', 'ex', ex.id)).filter(s => !s.wu).sort((a, b) => a.t - b.t),
     rows = [],
     aim = `${ex.lo}–${ex.hi} reps @ ${ex.rir} RIR`,
     sess = [...new Set(ss.map(s => s.sess))],
     fat = j => Math.floor(j / 2), // later sets: about 1 rep fewer every 2 sets
-    sT = ex.bwl ? ss.map(s => tot(ex, s)) : ss;
+    sT = ex.bwl ? ss.map(s => withBodyweight(ex, s)) : ss;
   const lastS = ss.filter(s => s.sess == sess[sess.length - 1]),
     hint = lastS.length
-      ? `Last: ${lastS.map(s => `${wt(s.w)}×${s.r}${s.rir != null ? ' @' + rirTxt(s.rir) : ''}`).join(', ')} · ${aim}`
+      ? `Last: ${lastS.map(s => `${weightLabel(s.w)}×${s.r}${s.rir != null ? ' @' + rirLabel(s.rir) : ''}`).join(', ')} · ${aim}`
       : `${aim} · no history yet`;
   if (!(ex.inc > 0) || (!ex.bwl && lastS.length && Math.max(...lastS.map(s => s.w)) === 0)) {
     // bodyweight (or done at bodyweight last time): progress reps
@@ -1338,7 +1340,7 @@ async function suggest(ex, n) {
     for (let j = 0; j < n; j++) rows.push({ w: w || '', r: Math.max(ex.lo, r - fat(j)), rir: ex.rir });
     return { rows, hint };
   }
-  const E = strength(sT, ex.lo, ex.hi);
+  const E = estimateStrength(sT, ex.lo, ex.hi);
   if (!E) {
     for (let j = 0; j < n; j++) rows.push({ w: '', r: ex.lo, rir: ex.rir });
     return { rows, hint };
@@ -1347,7 +1349,7 @@ async function suggest(ex, n) {
     bt = null; // the weight you last used in today's rep range, and that set
   for (let k = sess.length - 1; k >= 0 && Wb == null; k--) {
     const t = sT
-      .filter(s => s.sess == sess[k] && isWork(s) && s.r >= ex.lo && s.r <= ex.hi)
+      .filter(s => s.sess == sess[k] && isWorkingSet(s) && s.r >= ex.lo && s.r <= ex.hi)
       .sort((a, b) => b.w - a.w || b.r - a.r)[0];
     if (t) {
       Wb = t.w;
@@ -1361,30 +1363,31 @@ async function suggest(ex, n) {
     w = Wb; // one more than last time, kept within the average's guard rails
     if (r > ex.hi) {
       r = ex.lo;
-      w = Math.max(rnd(E * pct(ex.lo, ex.rir), ex.inc), rnd(Wb + ex.inc, ex.inc));
+      w = Math.max(roundToStep(E * fractionOf1RM(ex.lo, ex.rir), ex.inc), roundToStep(Wb + ex.inc, ex.inc));
     } else if (r < ex.lo) {
       r = ex.lo;
-      w = Math.min(rnd(E * pct(ex.lo, ex.rir), ex.inc), rnd(Wb - ex.inc, ex.inc));
+      w = Math.min(roundToStep(E * fractionOf1RM(ex.lo, ex.rir), ex.inc), roundToStep(Wb - ex.inc, ex.inc));
     }
   } else {
     r = ex.lo;
-    w = rnd(E * pct(ex.lo, ex.rir), ex.inc);
+    w = roundToStep(E * fractionOf1RM(ex.lo, ex.rir), ex.inc);
   }
-  for (let j = 0; j < n; j++) rows.push({ w: outW(ex, w), r: Math.max(ex.lo, r - fat(j)), rir: ex.rir });
+  for (let j = 0; j < n; j++)
+    rows.push({ w: toLoadedWeight(ex, w), r: Math.max(ex.lo, r - fat(j)), rir: ex.rir });
   return { rows, hint };
 }
 
 /* After you log a set, the sets after it (that you haven't edited) adjust to how that set really went.
    % view: the weight moves to match today's strength. RIR view: the weight stays and the reps move,
    unless they'd leave the rep range. Never more than ±10% from the plan, about 1.5% easier per set for fatigue. */
-async function adjustPct(it, j, ex) {
-  const d = tot(ex, it.rows[j]);
-  if (+d.rir > 5 || d.wu || !(+d.w > 0) || !hasR(d) || !(+d.r > 0) || !(ex.inc > 0)) return;
-  const now = e1(+d.w, +d.r, +d.rir),
+async function adjustRemainingSetsPct(it, j, ex) {
+  const d = withBodyweight(ex, it.rows[j]);
+  if (+d.rir > 5 || d.wu || !(+d.w > 0) || !hasRir(d) || !(+d.r > 0) || !(ex.inc > 0)) return;
+  const now = estimate1RM(+d.w, +d.r, +d.rir),
     by = new Map();
-  for (const s of (await all('sets', 'ex', ex.id)).map(s => tot(ex, s)))
-    if (s.sess != W.sess && isWork(s) && Math.abs(s.r - d.r) <= 1)
-      by.set(s.sess, [s.t, Math.max(by.get(s.sess)?.[1] || 0, e1(s.w, s.r, s.rir))]);
+  for (const s of (await getAll('sets', 'ex', ex.id)).map(s => withBodyweight(ex, s)))
+    if (s.sess != workout.sess && isWorkingSet(s) && Math.abs(s.r - d.r) <= 1)
+      by.set(s.sess, [s.t, Math.max(by.get(s.sess)?.[1] || 0, estimate1RM(s.w, s.r, s.rir))]);
   let base = null;
   const v = [...by.values()]
     .sort((a, b) => a[0] - b[0])
@@ -1399,10 +1402,12 @@ async function adjustPct(it, j, ex) {
     });
     base = a / b;
   } else {
-    const f = it.rows.find(r => r.done && !r.wu && +tot(ex, r).w > 0 && hasR(r) && Math.abs(+r.r - d.r) <= 1);
+    const f = it.rows.find(
+      r => r.done && !r.wu && +withBodyweight(ex, r).w > 0 && hasRir(r) && Math.abs(+r.r - d.r) <= 1,
+    );
     if (f && f !== it.rows[j]) {
-      const fT = tot(ex, f);
-      base = e1(+fT.w, +fT.r, +fT.rir);
+      const fT = withBodyweight(ex, f);
+      base = estimate1RM(+fT.w, +fT.r, +fT.rir);
     }
   } // no history: compare with today's first set
   if (!base) return;
@@ -1410,57 +1415,58 @@ async function adjustPct(it, j, ex) {
   for (let q = j + 1; q < it.rows.length; q++) {
     const r = it.rows[q];
     if (r.done || r.wu || !r.auto || !(+r.pw > 0)) continue;
-    const w = outW(ex, r.pw * fac);
+    const w = toLoadedWeight(ex, r.pw * fac);
     if (w !== r.w) {
       r.w = w;
       r.adj = true;
     }
   }
 }
-function adjustNext(it, j, ex) {
+function adjustRemainingSetsRir(it, j, ex) {
   if (it.mode == 'pct') return;
-  const d = tot(ex, it.rows[j]);
-  if (+d.rir > 5 || d.wu || !(+d.w > 0) || !hasR(d) || !(+d.r > 0) || !(ex.inc > 0)) return;
-  const e = e1(+d.w, +d.r, +d.rir);
+  const d = withBodyweight(ex, it.rows[j]);
+  if (+d.rir > 5 || d.wu || !(+d.w > 0) || !hasRir(d) || !(+d.r > 0) || !(ex.inc > 0)) return;
+  const e = estimate1RM(+d.w, +d.r, +d.rir);
   let k = 0;
   for (let q = j + 1; q < it.rows.length; q++) {
     const r = it.rows[q];
-    if (r.done || r.wu || !r.auto || !(+r.r > 0) || !hasR(r)) continue;
+    if (r.done || r.wu || !r.auto || !(+r.r > 0) || !hasRir(r)) continue;
     const f = Math.pow(0.985, ++k),
       pw = +r.pw || +r.w || 0,
-      cl = w => (pw > 0 ? Math.min(rnd(pw * 1.1, ex.inc), Math.max(rnd(pw * 0.9, ex.inc), w)) : w);
-    let w = +tot(ex, r).w || 0,
+      cl = w =>
+        pw > 0 ? Math.min(roundToStep(pw * 1.1, ex.inc), Math.max(roundToStep(pw * 0.9, ex.inc), w)) : w;
+    let w = +withBodyweight(ex, r).w || 0,
       rr = +r.r;
     const w0 = w;
-    if (it.mode == 'pct' || !(w > 0)) w = cl(rnd(e * f * pct(rr, +r.rir), ex.inc));
+    if (it.mode == 'pct' || !(w > 0)) w = cl(roundToStep(e * f * fractionOf1RM(rr, +r.rir), ex.inc));
     else {
       rr = Math.round(30 * ((e * f) / w - 1) - +r.rir);
       if (rr > it.hi) {
         rr = it.hi;
-        w = cl(rnd(e * f * pct(rr, +r.rir), ex.inc));
+        w = cl(roundToStep(e * f * fractionOf1RM(rr, +r.rir), ex.inc));
       } else if (rr < it.lo) {
         rr = it.lo;
-        w = cl(rnd(e * f * pct(rr, +r.rir), ex.inc));
+        w = cl(roundToStep(e * f * fractionOf1RM(rr, +r.rir), ex.inc));
       }
     }
     if (rr !== +r.r || w !== w0) {
       r.r = rr;
-      if (w !== w0) r.w = outW(ex, w);
+      if (w !== w0) r.w = toLoadedWeight(ex, w);
       r.adj = true;
     }
   }
 }
 
 /* ---------- row info: e1RM + PR check ---------- */
-function info(r0, ex) {
-  const b = bwo(ex),
-    pr0 = S.pr[ex.id],
+function setInfo(r0, ex) {
+  const b = bodyweightFor(ex),
+    pr0 = state.pr[ex.id],
     pr = pr0 && { ...pr0, w: pr0.w + b };
   if (r0.wu) return { s: 'Warm-up', w: 0 };
-  const r = b ? tot(ex, r0) : r0;
+  const r = b ? withBodyweight(ex, r0) : r0;
   if (+r0.rir > 5 && r0.rir !== '') return { s: '5+: not used for suggestions', w: 0 };
-  if (!(r.w > 0 && r.r > 0 && hasR(r))) return { s: '', w: 0 };
-  if (isTest(r)) {
+  if (!(r.w > 0 && r.r > 0 && hasRir(r))) return { s: '', w: 0 };
+  if (isMaxTest(r)) {
     let s = 'Counts as a 1RM';
     if (pr) {
       const d = (r.w / pr.w - 1) * 100;
@@ -1468,7 +1474,7 @@ function info(r0, ex) {
     }
     return { s, w: 0 };
   }
-  const e = e1(r.w, r.r, r.rir);
+  const e = estimate1RM(r.w, r.r, r.rir);
   let s = 'e1RM ' + fmt(e);
   if (pr) {
     const d = (e / pr.w - 1) * 100;
@@ -1478,24 +1484,24 @@ function info(r0, ex) {
   return { s, w: 0 };
 }
 /* ---------- state ---------- */
-let S = { tab: 'train', view: null, ex: [], tpl: [], pr: {}, prl: [], hist: [] },
-  E = null,
-  W = null;
+let state = { tab: 'train', view: null, ex: [], tpl: [], pr: {}, prl: [], hist: [] },
+  draft = null,
+  workout = null;
 try {
-  W = JSON.parse(localStorage.getItem(LSP + 'w') || 'null');
+  workout = JSON.parse(localStorage.getItem(LS_PREFIX + 'w') || 'null');
 } catch {}
-const saveW = () => {
+const saveWorkout = () => {
   try {
-    localStorage.setItem(LSP + 'w', JSON.stringify(W));
+    localStorage.setItem(LS_PREFIX + 'w', JSON.stringify(workout));
   } catch {}
 };
-const EX = id => S.ex.find(e => e.id == id);
-async function load() {
-  S.ex = await all('exercises');
-  S.tpl = await all('templates');
-  S.sets = await all('sets');
-  S.pr = {};
-  S.tpl.forEach(t => {
+const exerciseById = id => state.ex.find(e => e.id == id);
+async function loadState() {
+  state.ex = await getAll('exercises');
+  state.tpl = await getAll('templates');
+  state.sets = await getAll('sets');
+  state.pr = {};
+  state.tpl.forEach(t => {
     if (!t.weeks) t.weeks = 8;
     if (!t.days) {
       t.days = [{ name: 'Day 1', items: t.items || [] }];
@@ -1503,14 +1509,14 @@ async function load() {
     }
     for (const d of t.days)
       for (const it of d.items) {
-        if (!it.mode) it.mode = EX(it.exId)?.mode == 'pct' ? 'pct' : 'rir';
+        if (!it.mode) it.mode = exerciseById(it.exId)?.mode == 'pct' ? 'pct' : 'rir';
         if (it.mode == 'pct' && !it.lines?.length) {
           it.lines = linesFromText(it.text);
-          if (!it.lines.length) it.lines = [newLine()];
+          if (!it.lines.length) it.lines = [newPctLine()];
         }
       }
   });
-  (await all('pr_history')).sort((a, b) => a.t - b.t).forEach(p => (S.pr[p.exId] = p));
+  (await getAll('pr_history')).sort((a, b) => a.t - b.t).forEach(p => (state.pr[p.exId] = p));
 } // latest tested PR per exercise
 
 /* ---------- plan slots: each one is RIR (sets, rep range, target RIR) or % of 1RM (lines of sets x reps @ % with a target RPE) ---------- */
@@ -1523,22 +1529,22 @@ function linesFromText(t) {
   }
   return out;
 }
-const rememberMode = async (ex, m) => {
+const rememberTrackingMode = async (ex, m) => {
   if (ex && ex.mode != m) {
     ex.mode = m;
-    await put('exercises', ex);
+    await dbPut('exercises', ex);
   }
 }; // new plan slots and quick adds start in the mode you used last
-const newLine = () => ({ n: 3, r: 3, p: 75 });
+const newPctLine = () => ({ n: 3, r: 3, p: 75 });
 // RIR slots: one target RIR per week of the plan.
-const rirWeeks = (it, weeks, ex) => {
+const weeklyRirTargets = (it, weeks, ex) => {
   const a = Array.isArray(it.rirW) ? it.rirW.slice(0, weeks) : [],
     d = a.length ? a[a.length - 1] : (it.rir ?? ex?.rir ?? 2);
   while (a.length < weeks) a.push(d);
   return a;
 };
-async function addItem(it, wk = 1) {
-  const ex = EX(it.exId);
+async function addExerciseToWorkout(it, wk = 1) {
+  const ex = exerciseById(it.exId);
   if (!ex) return;
   const pk = (a, b) => (a === '' || a == null ? b : a),
     mode = it.mode || (ex.mode == 'pct' ? 'pct' : 'rir'),
@@ -1548,28 +1554,28 @@ async function addItem(it, wk = 1) {
       Array.isArray(it.rirW) && it.rirW.length
         ? +it.rirW[Math.min(wk, it.rirW.length) - 1]
         : (pk(it.rir, ex.rir) ?? 2),
-    item = { exId: ex.id, mode, lo, hi, rirT, rows: [], hint: '', bwo: bwo(ex) },
-    g = await suggest({ ...ex, lo, hi, rir: rirT }, mode == 'pct' && it.lines?.length ? 0 : it.n || 3);
+    item = { exId: ex.id, mode, lo, hi, rirT, rows: [], hint: '', bwo: bodyweightFor(ex) },
+    g = await suggestSets({ ...ex, lo, hi, rir: rirT }, mode == 'pct' && it.lines?.length ? 0 : it.n || 3);
   item.hint = g.hint;
   if (mode == 'pct') {
-    const ref = await refFor(ex);
+    const ref = await reference1RM(ex);
     item.ref = ref?.w;
     item.refEst = ref?.est;
   }
   if (mode == 'pct' && it.lines?.length) {
     // planned % sets: the plan's %, nudged (max ±10%) by your recent trend at that rep count
-    const ss = (await all('sets', 'ex', ex.id))
+    const ss = (await getAll('sets', 'ex', ex.id))
       .filter(s => !s.wu)
       .sort((a, b) => a.t - b.t)
-      .map(s => tot(ex, s));
+      .map(s => withBodyweight(ex, s));
     let moved = 0;
     for (const l of it.lines) {
       const r = Math.max(1, Math.round(+l.r || 1)),
-        f = trend(ss, r),
+        f = strengthTrend(ss, r),
         wp = item.ref ? ((+l.p || 0) / 100) * item.ref : 0;
       if (f !== 1) moved = f;
       for (let k = 0; k < Math.max(1, Math.round(+l.n || 1)); k++)
-        item.rows.push({ w: wp > 0 ? outW(ex, wp * f) : '', r, rir: '', pw: wp, auto: true });
+        item.rows.push({ w: wp > 0 ? toLoadedWeight(ex, wp * f) : '', r, rir: '', pw: wp, auto: true });
     }
     const last = (item.hint || '').startsWith('Last:')
       ? item.hint.replace(/ · \d+–\d+ reps @ [\d.]+ RIR$/, '')
@@ -1586,37 +1592,42 @@ async function addItem(it, wk = 1) {
   if (nw) {
     const w0 = +item.rows[0].w || 0;
     item.rows.unshift(
-      ...RAMP[nw].map(([p, r]) => ({ w: w0 && ex.inc > 0 ? rnd(w0 * p, ex.inc) : '', r, rir: '', wu: true })),
+      ...WARMUP_RAMP[nw].map(([p, r]) => ({
+        w: w0 && ex.inc > 0 ? roundToStep(w0 * p, ex.inc) : '',
+        r,
+        rir: '',
+        wu: true,
+      })),
     );
   }
-  W.items.push(item);
+  workout.items.push(item);
 }
 
-async function start(tid, day = 0) {
-  PICK = null;
-  LAND = false;
-  const t = tid ? S.tpl.find(x => x.id == tid) : null,
+async function startWorkout(tid, day = 0) {
+  picker = null;
+  showTrainHome = false;
+  const t = tid ? state.tpl.find(x => x.id == tid) : null,
     dy = t && t.days[day];
-  W = {
+  workout = {
     sess: Date.now(),
     name: dy ? `${t.name} · ${dy.name}` : 'Quick workout',
     pd: dy ? `${t.id}:${day}` : undefined,
-    rest: +lg('rest') || 120,
+    rest: +lsGet('rest') || 120,
     restEnd: 0,
     items: [],
   };
   if (dy) {
-    const wk = planRun(t).wk;
-    for (const it of dy.items) await addItem(it, wk);
+    const wk = planProgress(t).wk;
+    for (const it of dy.items) await addExerciseToWorkout(it, wk);
   }
-  saveW();
+  saveWorkout();
   render();
 }
 
-function planRun(t) {
+function planProgress(t) {
   const dpw = t.days.length,
     seen = new Map();
-  S.sets
+  state.sets
     .filter(s => s.pd && s.pd.startsWith(t.id + ':') && s.sess >= t.runStart)
     .sort((a, b) => a.t - b.t)
     .forEach(s => {
@@ -1635,114 +1646,118 @@ function planRun(t) {
   };
 }
 /* ---------- rest timer ---------- */
-let AC,
-  alarmedFor = 0;
-const fmtT = x => Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0');
+let audioCtx,
+  alarmedAt = 0;
+const clockText = x => Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0');
 function restText() {
-  const rem = W.restEnd ? W.restEnd - Date.now() : 0;
-  return W.restEnd && rem <= 0 ? 'Go!' : fmtT(W.restEnd ? Math.ceil(rem / 1000) : W.rest);
+  const rem = workout.restEnd ? workout.restEnd - Date.now() : 0;
+  return workout.restEnd && rem <= 0
+    ? 'Go!'
+    : clockText(workout.restEnd ? Math.ceil(rem / 1000) : workout.rest);
 }
-function restCls() {
-  return 'rt' + (W.restEnd ? (W.restEnd - Date.now() > 0 ? ' run' : ' go') : '');
+function restClass() {
+  return 'rt' + (workout.restEnd ? (workout.restEnd - Date.now() > 0 ? ' run' : ' go') : '');
 }
-const rbw = () => {
-  const rem = W.restEnd ? W.restEnd - Date.now() : 0;
-  return rem > 0 ? Math.min(100, (rem / (W.rest * 1000)) * 100).toFixed(1) + '%' : '0%';
+const restBarWidth = () => {
+  const rem = workout.restEnd ? workout.restEnd - Date.now() : 0;
+  return rem > 0 ? Math.min(100, (rem / (workout.rest * 1000)) * 100).toFixed(1) + '%' : '0%';
 };
-const elapsed = () => {
-  const x = Math.floor((Date.now() - W.sess) / 1000);
-  return x >= 0 && x < 21600 ? fmtT(x) : '';
+const elapsedText = () => {
+  const x = Math.floor((Date.now() - workout.sess) / 1000);
+  return x >= 0 && x < 21600 ? clockText(x) : '';
 };
-const restBar = () =>
-  `<div class=rest><div class=rb><i id=rbi style="width:${rbw()}"></i></div><div class=rr><button class=s data-a=rdec>−15</button><button id=rt class="${restCls()}" data-a=redit>${restText()}</button><button class=s data-a=rinc>+15</button><button class=s data-a=rstop aria-label="Stop timer">✕</button></div></div>`;
+const restTimerBar = () =>
+  `<div class=rest><div class=rb><i id=rbi style="width:${restBarWidth()}"></i></div><div class=rr><button class=s data-a=rdec>−15</button><button id=rt class="${restClass()}" data-a=redit>${restText()}</button><button class=s data-a=rinc>+15</button><button class=s data-a=rstop aria-label="Stop timer">✕</button></div></div>`;
 function startRest() {
   try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-    AC.resume?.();
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume?.();
   } catch {}
-  W.restEnd = Date.now() + (W.rest || 120) * 1000;
-  saveW();
+  workout.restEnd = Date.now() + (workout.rest || 120) * 1000;
+  saveWorkout();
 }
 function alarm() {
   try {
     navigator.vibrate?.([250, 120, 250]);
   } catch {}
   try {
-    if (!AC) return;
-    const o = AC.createOscillator(),
-      g = AC.createGain();
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator(),
+      g = audioCtx.createGain();
     o.connect(g);
-    g.connect(AC.destination);
+    g.connect(audioCtx.destination);
     o.frequency.value = 880;
     g.gain.value = 0.25;
     o.start();
-    o.stop(AC.currentTime + 0.6);
+    o.stop(audioCtx.currentTime + 0.6);
   } catch {}
 }
 function setRest(n) {
   n = Math.min(1800, Math.max(15, n));
-  const d = n - W.rest;
-  W.rest = n;
-  if (W.restEnd && W.restEnd > Date.now()) W.restEnd += d * 1000;
-  ls('rest', n);
-  saveW();
+  const d = n - workout.rest;
+  workout.rest = n;
+  if (workout.restEnd && workout.restEnd > Date.now()) workout.restEnd += d * 1000;
+  lsSet('rest', n);
+  saveWorkout();
   tickRest();
 }
 function tickRest() {
-  if (!W) return;
-  if (W.restEnd) {
-    const rem = W.restEnd - Date.now();
-    if (rem <= 0 && rem > -4000 && alarmedFor !== W.restEnd) {
-      alarmedFor = W.restEnd;
+  if (!workout) return;
+  if (workout.restEnd) {
+    const rem = workout.restEnd - Date.now();
+    if (rem <= 0 && rem > -4000 && alarmedAt !== workout.restEnd) {
+      alarmedAt = workout.restEnd;
       alarm();
     }
   }
   const b = $('#rt');
   if (b) {
     b.textContent = restText();
-    b.className = restCls();
+    b.className = restClass();
   }
   const bi = $('#rbi');
-  if (bi) bi.style.width = rbw();
+  if (bi) bi.style.width = restBarWidth();
   const el = $('#el');
-  if (el) el.textContent = elapsed();
+  if (el) el.textContent = elapsedText();
 }
 setInterval(tickRest, 250);
-const bb = (n, done, cur, label) =>
+const barbellProgress = (n, done, cur, label) =>
   `<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({ length: n }, (_, i) => `<i${i < done ? ' class=d' : cur && i == done ? ' class=n' : ''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
-const NI = {
+const NAV_ICONS = {
   train: '<svg viewBox="0 0 24 24"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>',
   hist: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   tpl: '<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
   ex: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>',
 };
-function rirSel(attrs, v, { pct = false, max5 = false, blank = true } = {}) {
+function rirSelect(attrs, v, { pct = false, max5 = false, blank = true } = {}) {
   const cur = v === '' || v == null ? '' : +v,
-    vals = (max5 ? RIRS.filter(x => x <= 5) : RIRS).slice();
+    vals = (max5 ? RIR_CHOICES.filter(x => x <= 5) : RIR_CHOICES).slice();
   if (cur !== '' && !vals.includes(cur)) {
     vals.push(cur);
     vals.sort((a, b) => a - b);
   }
-  return `<select ${attrs} class="pick${cur === '' ? ' ph' : ''}">${blank ? `<option value=""${cur === '' ? ' selected' : ''}>${pct ? 'RPE' : 'RIR'}</option>` : ''}${(pct ? vals.slice().reverse() : vals).map(x => `<option value="${x}"${x === cur ? ' selected' : ''}>${pct ? rpeTxt(x) : rirTxt(x)}</option>`).join('')}</select>`;
+  return `<select ${attrs} class="pick${cur === '' ? ' ph' : ''}">${blank ? `<option value=""${cur === '' ? ' selected' : ''}>${pct ? 'RPE' : 'RIR'}</option>` : ''}${(pct ? vals.slice().reverse() : vals).map(x => `<option value="${x}"${x === cur ? ' selected' : ''}>${pct ? rpeLabel(x) : rirLabel(x)}</option>`).join('')}</select>`;
 }
 /* ---------- views ---------- */
 const opts = id =>
-  S.ex.map(x => `<option value="${x.id}" ${x.id == id ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+  state.ex
+    .map(x => `<option value="${x.id}" ${x.id == id ? 'selected' : ''}>${esc(x.name)}</option>`)
+    .join('');
 
-const COG =
+const COG_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
-const ttl = t =>
-  `<div class=hd><h2>${t}</h2><button class=cog data-a=settings aria-label="Settings">${COG}</button></div>`; // every tab's title row, with the settings cog
-const sortedEx = () =>
-  S.ex.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+const pageTitle = t =>
+  `<div class=hd><h2>${t}</h2><button class=cog data-a=settings aria-label="Settings">${COG_ICON}</button></div>`; // every tab's title row, with the settings cog
+const exercisesByName = () =>
+  state.ex.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 /* ---------- type-to-find exercises (like Home log): most-used chips when empty, ranked matches while typing ---------- */
-let TQ = { k: null, q: '' },
-  PALL = false,
-  TR = null; // TR: plan item being replaced {k,j,q}   // plan-editor search (day index + text); picker "show all" toggle
-function exMatches(q, skip) {
+let planAddSearch = { k: null, q: '' },
+  pickerShowAll = false,
+  planReplace = null; // TR: plan item being replaced {k,j,q}   // plan-editor search (day index + text); picker "show all" toggle
+function matchExercises(q, skip) {
   const u = {};
-  for (const x of S.sets) u[x.exId] = (u[x.exId] || 0) + 1;
-  const l = S.ex.filter(e => e.id != skip),
+  for (const x of state.sets) u[x.exId] = (u[x.exId] || 0) + 1;
+  const l = state.ex.filter(e => e.id != skip),
     nm = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
   q = q.trim().toLowerCase();
   if (!q)
@@ -1761,50 +1776,50 @@ function exMatches(q, skip) {
     .slice(0, 8)
     .map(x => x[0]);
 }
-function exSugg(q, skip, go, mk) {
-  const l = exMatches(q, skip),
+function exerciseSuggestions(q, skip, go, mk) {
+  const l = matchExercises(q, skip),
     t = q.trim();
   if (!t)
     return l.length
       ? `<div class=chips>${l.map(e => `<button class=chip ${go(e)}>${esc(e.name)}</button>`).join('')}</div>`
       : '';
-  const exact = S.ex.some(e => e.name.toLowerCase() == t.toLowerCase());
+  const exact = state.ex.some(e => e.name.toLowerCase() == t.toLowerCase());
   return `<div class=sugg>${l.map(e => `<button class=sg ${go(e)}><span>${esc(e.name)}</span><span class=m>${e.inc > 0 ? `${e.lo}–${e.hi} reps` : 'bodyweight'}</span></button>`).join('')}${exact ? '' : `<button class="sg new" ${mk}>＋ New exercise “${esc(t.slice(0, 80))}”</button>`}</div>`;
 }
-const pickBox = () => {
-  const skip = PICK.t == 'rep' ? W.items[PICK.i]?.exId : null;
+const pickerResults = () => {
+  const skip = picker.t == 'rep' ? workout.items[picker.i]?.exId : null;
   return (
-    exSugg(PQ, skip, e => `data-a=pickGo data-x=${e.id}`, 'data-a=pickNew') +
-    (PQ.trim()
+    exerciseSuggestions(pickerQuery, skip, e => `data-a=pickGo data-x=${e.id}`, 'data-a=pickNew') +
+    (pickerQuery.trim()
       ? ''
-      : PALL
-        ? `<div style="margin-top:8px">${pickList()}</div>`
+      : pickerShowAll
+        ? `<div style="margin-top:8px">${pickerFullList()}</div>`
         : `<button class=lk data-a=pickAll>Show all exercises</button>`)
   );
 };
-const trBox = () => {
-  const it = E.days[TR.k].items[TR.j];
-  return exSugg(TR.q, it.exId, e => `data-a=tplSet data-x=${e.id}`, 'data-a=tplSetNew');
+const planReplaceResults = () => {
+  const it = draft.days[planReplace.k].items[planReplace.j];
+  return exerciseSuggestions(planReplace.q, it.exId, e => `data-a=tplSet data-x=${e.id}`, 'data-a=tplSetNew');
 };
-const tqBox = k =>
-  exSugg(
-    TQ.k == k ? TQ.q : '',
+const planAddResults = k =>
+  exerciseSuggestions(
+    planAddSearch.k == k ? planAddSearch.q : '',
     null,
     e => `data-a=tplPick data-k=${k} data-x=${e.id}`,
     `data-a=tplPickNew data-k=${k}`,
   );
-const newEx = async name => {
+const createExercise = async name => {
   name = name.trim().slice(0, 80);
   if (!name) return null;
-  const id = await put('exercises', { name, mode: 'rir', inc: 2, lo: 8, hi: 12, rir: 2 });
-  await load();
+  const id = await dbPut('exercises', { name, mode: 'rir', inc: 2, lo: 8, hi: 12, rir: 2 });
+  await loadState();
   toast(`Created ${name}: RIR, 8–12 reps, 2 kg steps. Change it in Exercises.`);
   return id;
 };
-function pickList() {
-  const q = PQ.trim().toLowerCase(),
-    skip = PICK.t == 'rep' ? W.items[PICK.i]?.exId : null,
-    l = sortedEx().filter(e => e.id != skip && e.name.toLowerCase().includes(q));
+function pickerFullList() {
+  const q = pickerQuery.trim().toLowerCase(),
+    skip = picker.t == 'rep' ? workout.items[picker.i]?.exId : null,
+    l = exercisesByName().filter(e => e.id != skip && e.name.toLowerCase().includes(q));
   return (
     l
       .map(
@@ -1814,23 +1829,23 @@ function pickList() {
       .join('') || '<p class=m>No exercise matches.</p>'
   );
 }
-function updInfo(s) {
-  const it = W.items[s.dataset.i];
-  $('.inf>span', s).innerHTML = infoTxt(it, it.rows[s.dataset.j], EX(it.exId));
+function updateSetInfo(s) {
+  const it = workout.items[s.dataset.i];
+  $('.inf>span', s).innerHTML = setInfoHtml(it, it.rows[s.dataset.j], exerciseById(it.exId));
 }
 
-const pctOf = (it, w) => {
+const percentOfRef = (it, w) => {
   const t = (w === '' || w == null ? 0 : +w) + (it.bwo || 0);
   return it.ref > 0 && t > 0 && (w !== '' || it.bwo) ? Math.round((t / it.ref) * 1000) / 10 : '';
 };
-function card(it, i) {
-  const ex = EX(it.exId);
+function exerciseCard(it, i) {
+  const ex = exerciseById(it.exId);
   if (!ex) return '';
   const P = it.mode == 'pct',
-    pr = S.pr[ex.id];
+    pr = state.pr[ex.id];
   const ref = P
     ? it.ref > 0
-      ? `${it.refEst ? 'Estimated 1RM' : '1RM'} ${fmt(it.ref)}${it.refEst ? '' : ' · ' + age(pr?.t)}`
+      ? `${it.refEst ? 'Estimated 1RM' : '1RM'} ${fmt(it.ref)}${it.refEst ? '' : ' · ' + ageText(pr?.t)}`
       : 'No 1RM yet'
     : '';
   let h = `<div class=card><div class=hd><b style="flex:1">${esc(ex.name)}</b><span class=seg role=group aria-label="Track by"><button class="${P ? '' : 'on'}" data-a=mode data-i=${i} data-m=rir>RIR</button><button class="${P ? 'on' : ''}" data-a=mode data-i=${i} data-m=pct>% 1RM</button></span><button class=s style="width:40px" data-a=rmx data-i=${i} aria-label="Remove exercise">×</button></div><div class=m>${esc([ref, ex.bwl ? (it.bwo ? `incl. ${fmt(it.bwo)} kg bodyweight` : 'set your bodyweight in Settings (⚙)') : '', it.hint].filter(Boolean).join(' · '))}</div>`;
@@ -1839,13 +1854,13 @@ function card(it, i) {
     it.rows
       .map((r, j) => {
         const d = r.done ? 'disabled' : '';
-        const wv = P ? pctOf(it, r.w) : r.w > 0 ? fmt(r.w) : r.done ? 'BW' : '',
+        const wv = P ? percentOfRef(it, r.w) : r.w > 0 ? fmt(r.w) : r.done ? 'BW' : '',
           ev = r.rir === '' || r.rir == null ? '' : P ? fmt(10 - r.rir) : fmt(r.rir);
         return `<div class="set ${r.done ? 'dn' : ''}${r.wu ? ' wu' : ''}" data-i=${i} data-j=${j}>
   <input data-f=w inputmode=decimal aria-label="${P ? 'Percent of 1RM' : 'Weight in kg, empty for bodyweight'}" value="${wv}" ${d}>
-  <button class=s data-a=step data-d=-1 aria-label="One rep less" ${d}>−</button><input data-f=r inputmode=numeric placeholder=reps aria-label=Reps value="${fmt(r.r)}" ${d}><button class=s data-a=step data-d=1 aria-label="One rep more" ${d}>+</button>${rirSel(`data-f=rir aria-label="${P ? 'RPE (10 = max effort)' : 'Reps in reserve'}" ${d}`, r.rir, { pct: P })}
+  <button class=s data-a=step data-d=-1 aria-label="One rep less" ${d}>−</button><input data-f=r inputmode=numeric placeholder=reps aria-label=Reps value="${fmt(r.r)}" ${d}><button class=s data-a=step data-d=1 aria-label="One rep more" ${d}>+</button>${rirSelect(`data-f=rir aria-label="${P ? 'RPE (10 = max effort)' : 'Reps in reserve'}" ${d}`, r.rir, { pct: P })}
   <button class="ck ${r.done ? 'on' : ''}" data-a=${r.done ? 'undo' : 'log'} aria-label="${r.done ? 'Undo set' : 'Log set'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg></button>
-  <div class=inf><span>${infoTxt(it, r, ex)}</span><span><button class=lk data-a=wu>${r.wu ? 'Make working set' : 'Mark as warm-up'}</button> <button class=lk data-a=rms>Remove set</button></span></div></div>`;
+  <div class=inf><span>${setInfoHtml(it, r, ex)}</span><span><button class=lk data-a=wu>${r.wu ? 'Make working set' : 'Mark as warm-up'}</button> <button class=lk data-a=rms>Remove set</button></span></div></div>`;
       })
       .join('');
   return (
@@ -1853,124 +1868,125 @@ function card(it, i) {
     `<div class=row><button class=b data-a=addset data-i=${i}>+ Set</button><button class=b data-a=repl data-i=${i}>⇄ Replace</button></div></div>`
   );
 }
-function infoTxt(it, r, ex) {
+function setInfoHtml(it, r, ex) {
   const P = it.mode == 'pct',
-    x = info(r, ex),
+    x = setInfo(r, ex),
     kg = P
       ? it.bwo
         ? +r.w > 0
-          ? `<b>+${fmt(rnd(+r.w, 0.01))} kg</b>`
+          ? `<b>+${fmt(roundToStep(+r.w, 0.01))} kg</b>`
           : r.w === '' && !r.done
             ? ''
             : '<b>BW</b>'
         : +r.w > 0
-          ? `<b>${fmt(rnd(+r.w, 0.01))} kg</b>`
+          ? `<b>${fmt(roundToStep(+r.w, 0.01))} kg</b>`
           : ''
       : '',
     adj = r.adj && !r.done ? 'adjusted' : '',
     note =
-      x.s && (!P || x.w || isTest(r) || r.wu) ? `<span class="${x.w ? 'wr' : ''}">${esc(x.s)}</span>` : ''; // % view: just the kg, plus warnings
+      x.s && (!P || x.w || isMaxTest(r) || r.wu) ? `<span class="${x.w ? 'wr' : ''}">${esc(x.s)}</span>` : ''; // % view: just the kg, plus warnings
   return [kg, note, adj].filter(Boolean).join(' · ');
 }
 
-function nag() {
-  const lb = lastBackup();
-  return S.sets.length && Date.now() - lb > 6048e5
-    ? `<div class=card><span class=wr>Back up your data</span><div class=m>${lb ? 'Last backup ' + age(lb) : 'No backup yet'}. Clearing browser data erases your history.</div><button class=b data-a=backup>Export backup</button></div>`
+function backupReminder() {
+  const lb = lastBackupTime();
+  return state.sets.length && Date.now() - lb > 6048e5
+    ? `<div class=card><span class=wr>Back up your data</span><div class=m>${lb ? 'Last backup ' + ageText(lb) : 'No backup yet'}. Clearing browser data erases your history.</div><button class=b data-a=backup>Export backup</button></div>`
     : '';
 }
-function rPlan(t) {
+function renderPlanCard(t) {
   if (!t.active)
     return `<div class=card><div class=hd><b>${esc(t.name)}</b><span class=m>${t.days.length} days/week · ${t.weeks} weeks</span></div><button class=b data-a=planStart data-i=${t.id}>Start plan</button></div>`;
-  const p = planRun(t);
+  const p = planProgress(t);
   return (
-    `<div class=card><div class=hd><b>${esc(t.name)}</b><span class=m>${t.days.length} days/week</span></div><div class=big-n>${p.done ? 'Complete' : `Week ${p.wk}<span> of ${t.weeks}</span>`}</div>${bb(t.weeks, Math.min(t.weeks, Math.floor(p.total / t.days.length)), !p.done, p.done ? 'Plan complete' : `Week ${p.wk} of ${t.weeks}`)}` +
+    `<div class=card><div class=hd><b>${esc(t.name)}</b><span class=m>${t.days.length} days/week</span></div><div class=big-n>${p.done ? 'Complete' : `Week ${p.wk}<span> of ${t.weeks}</span>`}</div>${barbellProgress(t.weeks, Math.min(t.weeks, Math.floor(p.total / t.days.length)), !p.done, p.done ? 'Plan complete' : `Week ${p.wk} of ${t.weeks}`)}` +
     (p.done
       ? `<p>Plan complete: all ${t.weeks} weeks done.</p><div class=row><button class="b p" data-a=planStart data-i=${t.id}>Restart</button><button class=b data-a=planStop data-i=${t.id}>Close</button></div>`
       : t.days
           .map(
             (d, k) =>
-              `<button class="b big" data-a=start data-i=${t.id} data-d=${k}>${p.wdays.has(k) ? '✓ ' : ''}${esc(d.name)}${k == p.nx ? ' · next' : ''}<small>${d.items.map(i => esc(EX(i.exId)?.name || '?')).join(', ') || 'No exercises'}</small></button>`,
+              `<button class="b big" data-a=start data-i=${t.id} data-d=${k}>${p.wdays.has(k) ? '✓ ' : ''}${esc(d.name)}${k == p.nx ? ' · next' : ''}<small>${d.items.map(i => esc(exerciseById(i.exId)?.name || '?')).join(', ') || 'No exercises'}</small></button>`,
           )
           .join('') + `<button class=lk data-a=planStop data-i=${t.id}>End plan early</button>`) +
     `</div>`
   );
 }
 
-function prog() {
-  const n = W.items.length;
+function progressCard() {
+  const n = workout.items.length;
   if (!n) return '';
-  const d = W.items.filter(i => i.rows.length && i.rows.every(r => r.done)).length;
-  return `<div class=card><div class=hd><span class=m>${d} of ${n} exercise${n == 1 ? '' : 's'} done</span><span class=m id=el>${elapsed()}</span></div>${bb(n, d, d < n, `${d} of ${n} exercises done`)}</div>`;
+  const d = workout.items.filter(i => i.rows.length && i.rows.every(r => r.done)).length;
+  return `<div class=card><div class=hd><span class=m>${d} of ${n} exercise${n == 1 ? '' : 's'} done</span><span class=m id=el>${elapsedText()}</span></div>${barbellProgress(n, d, d < n, `${d} of ${n} exercises done`)}</div>`;
 }
-let LAND = false; // true = show the Train landing page even though a workout is in progress
-let PICK = null,
-  PQ = ''; // exercise picker state: {t:'add'|'rep', i, y}
-function rPick() {
-  const old = PICK.t == 'rep' ? EX(W.items[PICK.i]?.exId) : null;
-  return `<div class=hd><h2>${PICK.t == 'rep' ? 'Replace ' + esc(old?.name || 'exercise') : 'Add exercise'}</h2><button class=b data-a=pickCancel>Cancel</button></div><input id=pq placeholder="Type an exercise" value="${esc(PQ)}" autocomplete=off enterkeyhint=done><div id=plist>${pickBox()}</div>`;
+let showTrainHome = false; // true = show the Train landing page even though a workout is in progress
+let picker = null,
+  pickerQuery = ''; // exercise picker state: {t:'add'|'rep', i, y}
+function renderPicker() {
+  const old = picker.t == 'rep' ? exerciseById(workout.items[picker.i]?.exId) : null;
+  return `<div class=hd><h2>${picker.t == 'rep' ? 'Replace ' + esc(old?.name || 'exercise') : 'Add exercise'}</h2><button class=b data-a=pickCancel>Cancel</button></div><input id=pq placeholder="Type an exercise" value="${esc(pickerQuery)}" autocomplete=off enterkeyhint=done><div id=plist>${pickerResults()}</div>`;
 }
-function rTrain() {
-  if (!W || LAND) {
-    const ps = [...S.tpl.filter(t => t.active), ...S.tpl.filter(t => !t.active)],
-      cur = W
-        ? `<div class=card><div class=hd><b>Workout in progress</b><span class=m>${W.items.reduce((n, i) => n + i.rows.filter(x => x.done).length, 0)} sets logged</span></div><div class=m>${esc(W.name)}</div><div class=row><button class="b p" data-a=resume>Resume</button><button class=b data-a=finish>Finish</button></div></div>`
+function renderTrain() {
+  if (!workout || showTrainHome) {
+    const ps = [...state.tpl.filter(t => t.active), ...state.tpl.filter(t => !t.active)],
+      cur = workout
+        ? `<div class=card><div class=hd><b>Workout in progress</b><span class=m>${workout.items.reduce((n, i) => n + i.rows.filter(x => x.done).length, 0)} sets logged</span></div><div class=m>${esc(workout.name)}</div><div class=row><button class="b p" data-a=resume>Resume</button><button class=b data-a=finish>Finish</button></div></div>`
         : '';
     return (
-      ttl('Train') +
+      pageTitle('Train') +
       cur +
-      nag() +
-      (ps.map(rPlan).join('') ||
+      backupReminder() +
+      (ps.map(renderPlanCard).join('') ||
         '<p class=m>No plans yet. Build one in Plans, or start a quick workout.</p>') +
       `<button class=b data-a=start>Quick workout</button>`
     );
   }
-  if (!W.rest) W.rest = +lg('rest') || 120;
-  if (PICK) return rPick();
+  if (!workout.rest) workout.rest = +lsGet('rest') || 120;
+  if (picker) return renderPicker();
   return (
-    `<button class=b data-a=toLanding>‹ Back</button><div class=hd><h2>${esc(W.name)}</h2><button class="b p" data-a=finish>Finish</button></div>` +
-    prog() +
-    W.items.map(card).join('') +
-    (S.ex.length
+    `<button class=b data-a=toLanding>‹ Back</button><div class=hd><h2>${esc(workout.name)}</h2><button class="b p" data-a=finish>Finish</button></div>` +
+    progressCard() +
+    workout.items.map(exerciseCard).join('') +
+    (state.ex.length
       ? `<button class="b p" style="width:100%;margin-top:12px" data-a=pickAdd>+ Add exercise</button>`
       : '<p class=m>Create exercises first.</p>') +
-    restBar()
+    restTimerBar()
   );
 }
-let EQ = ''; // Exercises tab search text
-const exHit = n => {
+let exerciseFilter = ''; // Exercises tab search text
+const matchesFilter = n => {
   n = n.toLowerCase();
-  return EQ.toLowerCase()
+  return exerciseFilter
+    .toLowerCase()
     .split(/\s+/)
     .filter(Boolean)
     .every(w => n.includes(w));
 };
-function rEx() {
+function renderExercises() {
   return (
-    ttl('Exercises') +
-    (S.ex.length
-      ? `<input id=exq type=search placeholder="Search exercises" value="${esc(EQ)}" autocomplete=off enterkeyhint=search>`
+    pageTitle('Exercises') +
+    (state.ex.length
+      ? `<input id=exq type=search placeholder="Search exercises" value="${esc(exerciseFilter)}" autocomplete=off enterkeyhint=search>`
       : '') +
-    (!S.ex.length && !S.sets.length && !ghCfg()
+    (!state.ex.length && !state.sets.length && !githubConfig()
       ? `<div class=card><b>No data here</b><div class=m>If you had a backup, restore it first: tap ⚙ (top right), enter your token in Automatic backup and tap Turn on. Don't add anything before restoring.</div></div>`
       : '') +
-    sortedEx()
+    exercisesByName()
       .map(e => {
-        const p = S.pr[e.id];
-        return `<button class="b big exr" data-a=exOpen data-i=${e.id} data-q="${esc(e.name.toLowerCase())}"${exHit(e.name) ? '' : ' hidden'}><span class=l>${esc(e.name)}<small>${e.inc > 0 ? 'increment ' + e.inc : 'bodyweight'}</small></span>${p ? `<span class=r><b>${e.bwl ? '+' : ''}${fmt(p.w)}<i> kg</i></b><small>1RM ${age(p.t)}${e.pb ? ' · PB ' + fmt(e.pb) : ''}</small></span>` : e.pb ? `<span class=r><small>PB ${fmt(e.pb)}</small></span>` : e.mode == 'pct' ? '<span class=r><small>No 1RM</small></span>' : ''}</button>`;
+        const p = state.pr[e.id];
+        return `<button class="b big exr" data-a=exOpen data-i=${e.id} data-q="${esc(e.name.toLowerCase())}"${matchesFilter(e.name) ? '' : ' hidden'}><span class=l>${esc(e.name)}<small>${e.inc > 0 ? 'increment ' + e.inc : 'bodyweight'}</small></span>${p ? `<span class=r><b>${e.bwl ? '+' : ''}${fmt(p.w)}<i> kg</i></b><small>1RM ${ageText(p.t)}${e.pb ? ' · PB ' + fmt(e.pb) : ''}</small></span>` : e.pb ? `<span class=r><small>PB ${fmt(e.pb)}</small></span>` : e.mode == 'pct' ? '<span class=r><small>No 1RM</small></span>' : ''}</button>`;
       })
       .join('') +
-    `<p class=m id=exnone${!S.ex.length || S.ex.some(e => exHit(e.name)) ? ' hidden' : ''}>No exercise matches “${esc(EQ)}”.</p><button class="b p" data-a=exNew>New exercise</button>`
+    `<p class=m id=exnone${!state.ex.length || state.ex.some(e => matchesFilter(e.name)) ? ' hidden' : ''}>No exercise matches “${esc(exerciseFilter)}”.</p><button class="b p" data-a=exNew>New exercise</button>`
   );
 }
 
-function sessions(sets) {
+function groupSessions(sets) {
   const g = {};
   sets.forEach(s => (g[s.sess] ??= []).push(s));
   return Object.keys(g)
     .map(k => {
       const ss = g[k].sort((a, b) => a.t - b.t),
-        es = ss.filter(s => s.rir != null && !s.test).map(s => e1(s.w, s.r, s.rir));
+        es = ss.filter(s => s.rir != null && !s.test).map(s => estimate1RM(s.w, s.r, s.rir));
       return {
         k: +k,
         t: ss[0].t,
@@ -1982,7 +1998,7 @@ function sessions(sets) {
     })
     .sort((a, b) => b.k - a.k);
 }
-function chart(l, v, t, z, u = '') {
+function lineChart(l, v, t, z, u = '') {
   if (v.length < 2) return '';
   const mx = Math.max(...v),
     mn = z ? 0 : Math.min(...v),
@@ -2000,7 +2016,7 @@ function chart(l, v, t, z, u = '') {
  <g class=tip visibility=hidden><line y1="${T}" y2="${B}" stroke="var(--fg)" stroke-width="1" opacity=".35"/><circle r="4" fill="var(--ac)" stroke="var(--c)" stroke-width="2"/><rect rx="5" fill="var(--c2)"/><text font-size="11" font-weight="600" fill="var(--fg)" text-anchor="middle" font-family="Bw,system-ui,sans-serif"></text></g></svg>`;
 }
 // Touch, drag or hover on a chart: mark the nearest session and show its date and value.
-function chartTip(e) {
+function showChartTip(e) {
   const sv = e.target.closest?.('svg.chart');
   if (!sv) {
     if (e.type == 'pointerdown')
@@ -2034,46 +2050,46 @@ function chartTip(e) {
   rc.setAttribute('width', w);
   rc.setAttribute('height', 18);
 }
-addEventListener('pointermove', chartTip);
-addEventListener('pointerdown', chartTip);
+addEventListener('pointermove', showChartTip);
+addEventListener('pointerdown', showChartTip);
 
-function rExd() {
-  const e = E;
-  if (e.cur === undefined) e.cur = e.id ? (S.pr[e.id]?.w ?? '') : '';
+function renderExerciseDetail() {
+  const e = draft;
+  if (e.cur === undefined) e.cur = e.id ? (state.pr[e.id]?.w ?? '') : '';
   const n = k => `type=number step=any data-n data-b=${k} value="${e[k] ?? ''}"`;
   let h =
     `<button class=b data-a=back>‹ Back</button><div class=card>
  <label>Name<input data-b=name value="${esc(e.name)}"></label>
  <label>Weight increment (0 = bodyweight only)<input ${n('inc')}></label>
  <label class=chk><input type=checkbox data-b=bwl ${e.bwl ? 'checked' : ''}> Load includes bodyweight (pull-ups, dips, chin-ups…)</label>
- ${e.bwl ? `<div class=m>Weights, 1RM and PB here are the <b>added</b> kg; the maths adds your bodyweight (${BWv() ? fmt(BWv()) + ' kg' : 'not set yet: set it in Settings (⚙)'}).</div>` : ''}
+ ${e.bwl ? `<div class=m>Weights, 1RM and PB here are the <b>added</b> kg; the maths adds your bodyweight (${bodyweight() ? fmt(bodyweight()) + ' kg' : 'not set yet: set it in Settings (⚙)'}).</div>` : ''}
  <label>Warm-up sets added before working sets (0–4)<input ${n('wu')} min=0 max=4 placeholder=0></label>
  <div class=row><label>Current 1RM (kg)<input ${n('cur')}></label><label>Lifetime PB (kg)<input ${n('pb')}></label></div>
  <div class=m>Current 1RM sets your % weights. Lifetime PB is your best ever, and it rises on its own when you beat it.</div>` +
-    `<div class=m style="margin-top:10px">Quick workouts (plans set their own)</div><div class=row><label>Reps min<input ${n('lo')}></label><label>Reps max<input ${n('hi')}></label><label>Target RIR${rirSel(`data-n data-b=rir`, e.rir ?? 2, { max5: true, blank: false })}</label></div>` +
+    `<div class=m style="margin-top:10px">Quick workouts (plans set their own)</div><div class=row><label>Reps min<input ${n('lo')}></label><label>Reps max<input ${n('hi')}></label><label>Target RIR${rirSelect(`data-n data-b=rir`, e.rir ?? 2, { max5: true, blank: false })}</label></div>` +
     `<div class=row><button class="b p" data-a=exSave>Save</button>${e.id ? '<button class=b data-a=exDel>Delete</button>' : ''}</div></div>`;
   if (!e.id) return h;
   h +=
     `<div class=card><b>Tested 1RM history</b><div class=m>Latest entry is your current 1RM.</div>` +
-    (S.prl
+    (state.prl
       .map(
         (p, k) =>
-          `<div class=hl><span>${fmt(p.w)} · ${dstr(p.t)} <span class=m>${age(p.t)}${k == 0 ? ' · current' : ''}</span></span><button data-a=prDel data-i=${p.id}>×</button></div>`,
+          `<div class=hl><span>${fmt(p.w)} · ${dateText(p.t)} <span class=m>${ageText(p.t)}${k == 0 ? ' · current' : ''}</span></span><button data-a=prDel data-i=${p.id}>×</button></div>`,
       )
       .join('') || '<p class=m>None yet.</p>') +
     `<div class=row><input id=prw type=number step=any inputmode=decimal placeholder="Tested 1RM"><input id=prd type=date value="${new Date().toISOString().slice(0, 10)}"><button class=b data-a=prAdd>Add PR</button></div></div>`;
-  const ses = sessions(S.hist);
+  const ses = groupSessions(state.hist);
   h +=
     `<div class=card><b>History</b>` +
     (ses.length
-      ? chart(
+      ? lineChart(
           'Max weight per session (kg)',
           ses.map(x => x.top.w).reverse(),
           ses.map(x => x.t).reverse(),
           0,
           'kg',
         ) +
-        chart(
+        lineChart(
           'Volume per session (reps)',
           ses.map(x => x.vol).reverse(),
           ses.map(x => x.t).reverse(),
@@ -2083,11 +2099,11 @@ function rExd() {
         ses
           .map(
             x =>
-              `<div class=card style="margin:8px 0"><div class=hd><b>${dstr(x.t)}</b><span class=m>volume ${x.vol} reps</span></div><div class=m>Top set ${wt(x.top.w)}×${x.top.r}${x.e ? ` · best e1RM ${fmt(x.e)}` : ''}</div>` +
+              `<div class=card style="margin:8px 0"><div class=hd><b>${dateText(x.t)}</b><span class=m>volume ${x.vol} reps</span></div><div class=m>Top set ${weightLabel(x.top.w)}×${x.top.r}${x.e ? ` · best e1RM ${fmt(x.e)}` : ''}</div>` +
               x.ss
                 .map(
                   s =>
-                    `<div class=hl><span>${wt(s.w)} × ${s.r}${s.rir != null ? ` @ ${rirTxt(s.rir)} RIR` : ''}${s.test ? ' ★test' : ''}${s.wu ? ' <span class=m>warm-up</span>' : ''}</span><button data-a=sdel data-i=${s.id}>×</button></div>`,
+                    `<div class=hl><span>${weightLabel(s.w)} × ${s.r}${s.rir != null ? ` @ ${rirLabel(s.rir)} RIR` : ''}${s.test ? ' ★test' : ''}${s.wu ? ' <span class=m>warm-up</span>' : ''}</span><button data-a=sdel data-i=${s.id}>×</button></div>`,
                 )
                 .join('') +
               `</div>`,
@@ -2098,27 +2114,27 @@ function rExd() {
   return h;
 }
 
-async function loadEx(id) {
-  S.prl = (await all('pr_history', 'ex', id)).sort((a, b) => b.t - a.t);
-  S.hist = (await all('sets', 'ex', id)).sort((a, b) => b.t - a.t);
-  await load();
+async function openExerciseHistory(id) {
+  state.prl = (await getAll('pr_history', 'ex', id)).sort((a, b) => b.t - a.t);
+  state.hist = (await getAll('sets', 'ex', id)).sort((a, b) => b.t - a.t);
+  await loadState();
   render();
 }
-const dk = t => {
+const dayKey = t => {
   const d = new Date(t);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-const vol = a => a.reduce((t, x) => t + x.r, 0); // volume = total reps performed
-let CAL = null;
-function rCal(g) {
+const totalReps = a => a.reduce((t, x) => t + x.r, 0); // volume = total reps performed
+let calendar = null;
+function renderCalendar(g) {
   const now = new Date();
-  CAL ??= { y: now.getFullYear(), m: now.getMonth(), sel: null };
+  calendar ??= { y: now.getFullYear(), m: now.getMonth(), sel: null };
   const by = {};
-  Object.keys(g).forEach(k => (by[dk(+k)] ??= []).push(k));
-  const off = (new Date(CAL.y, CAL.m, 1).getDay() + 6) % 7,
-    dim = new Date(CAL.y, CAL.m + 1, 0).getDate(),
-    today = dk(Date.now()),
-    pre = `${CAL.y}-${String(CAL.m + 1).padStart(2, '0')}-`;
+  Object.keys(g).forEach(k => (by[dayKey(+k)] ??= []).push(k));
+  const off = (new Date(calendar.y, calendar.m, 1).getDay() + 6) % 7,
+    dim = new Date(calendar.y, calendar.m + 1, 0).getDate(),
+    today = dayKey(Date.now()),
+    pre = `${calendar.y}-${String(calendar.m + 1).padStart(2, '0')}-`;
   let cells =
       '<div class=wd>M</div><div class=wd>T</div><div class=wd>W</div><div class=wd>T</div><div class=wd>F</div><div class=wd>S</div><div class=wd>S</div>' +
       '<i></i>'.repeat(off),
@@ -2127,25 +2143,28 @@ function rCal(g) {
     const key = pre + String(d).padStart(2, '0'),
       has = by[key];
     if (has) n += has.length;
-    cells += `<button class="cd${has ? ' tr' : ''}${key == today ? ' td' : ''}${key == CAL.sel ? ' sl' : ''}" data-a=calday data-k=${key}>${d}</button>`;
+    cells += `<button class="cd${has ? ' tr' : ''}${key == today ? ' td' : ''}${key == calendar.sel ? ' sl' : ''}" data-a=calday data-k=${key}>${d}</button>`;
   }
-  const label = new Date(CAL.y, CAL.m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
-    cur = CAL.y == now.getFullYear() && CAL.m == now.getMonth();
+  const label = new Date(calendar.y, calendar.m, 1).toLocaleDateString(undefined, {
+      month: 'long',
+      year: 'numeric',
+    }),
+    cur = calendar.y == now.getFullYear() && calendar.m == now.getMonth();
   return (
     `<div class=card><div class=hd><button class=s style="width:44px" data-a=calnav data-d=-1 aria-label="Previous month">‹</button><b>${label}</b><button class=s style="width:44px" data-a=calnav data-d=1 aria-label="Next month">›</button></div>
  <div class=m style="text-align:center">${n} workout${n == 1 ? '' : 's'} this month${cur ? '' : ' · '}${cur ? '' : '<button class=lk data-a=caltoday>Today</button>'}</div><div class=cal>${cells}</div></div>` +
-    rDay(g)
+    renderDay(g)
   );
 }
-function rDay(g) {
-  if (!CAL.sel) return '<p class=m>Tap a highlighted day to see its workout.</p>';
-  const label = new Date(CAL.sel + 'T12:00').toLocaleDateString(undefined, {
+function renderDay(g) {
+  if (!calendar.sel) return '<p class=m>Tap a highlighted day to see its workout.</p>';
+  const label = new Date(calendar.sel + 'T12:00').toLocaleDateString(undefined, {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
     }),
     ks = Object.keys(g)
-      .filter(k => dk(+k) == CAL.sel)
+      .filter(k => dayKey(+k) == calendar.sel)
       .sort((a, b) => a - b);
   if (!ks.length) return `<div class=card><b>${label}</b><p class=m>No workout logged.</p></div>`;
   return ks
@@ -2153,23 +2172,23 @@ function rDay(g) {
       const ss = g[k].slice().sort((a, b) => a.t - b.t),
         ids = [...new Set(ss.map(s => s.exId))];
       return (
-        `<div class=card><div class=hd><b>${esc(ss[0].wn || 'Workout')}</b><span class=m>${label}</span></div><div class=m>${ids.length} exercise${ids.length == 1 ? '' : 's'} · ${ss.length} sets · volume ${vol(ss)} reps</div>` +
+        `<div class=card><div class=hd><b>${esc(ss[0].wn || 'Workout')}</b><span class=m>${label}</span></div><div class=m>${ids.length} exercise${ids.length == 1 ? '' : 's'} · ${ss.length} sets · volume ${totalReps(ss)} reps</div>` +
         ids
           .map(id => {
             const xs = ss.filter(s => s.exId == id);
             return (
-              `<div style="margin-top:12px"><div class=hd><b>${esc(EX(id)?.name || 'Deleted exercise')}</b><span class=m>${vol(xs)} reps</span></div>` +
+              `<div style="margin-top:12px"><div class=hd><b>${esc(exerciseById(id)?.name || 'Deleted exercise')}</b><span class=m>${totalReps(xs)} reps</span></div>` +
               xs
                 .map(
                   (s, j) =>
-                    `<div class=hl><span class=m>${s.wu ? 'Warm-up' : 'Set ' + xs.slice(0, j + 1).filter(y => !y.wu).length}</span><span>${wt(s.w)}${s.w > 0 ? ' kg' : ''} × ${s.r}${s.rir != null ? ` · RIR ${rirTxt(s.rir)}` : ''}${s.test ? ' ★' : ''}</span></div>`,
+                    `<div class=hl><span class=m>${s.wu ? 'Warm-up' : 'Set ' + xs.slice(0, j + 1).filter(y => !y.wu).length}</span><span>${weightLabel(s.w)}${s.w > 0 ? ' kg' : ''} × ${s.r}${s.rir != null ? ` · RIR ${rirLabel(s.rir)}` : ''}${s.test ? ' ★' : ''}</span></div>`,
                 )
                 .join('') +
               `</div>`
             );
           })
           .join('') +
-        (W && W.sess == k
+        (workout && workout.sess == k
           ? ''
           : `<button class=b data-a=wedOpen data-i=${k} style="margin-top:10px">Edit workout</button>`) +
         `</div>`
@@ -2178,27 +2197,27 @@ function rDay(g) {
     .join('');
 }
 
-function rHist() {
+function renderHistory() {
   const g = {};
-  S.sets.forEach(s => (g[s.sess] ??= []).push(s));
+  state.sets.forEach(s => (g[s.sess] ??= []).push(s));
   const ks = Object.keys(g).sort((a, b) => b - a);
   return (
-    ttl('History') +
-    rCal(g) +
+    pageTitle('History') +
+    renderCalendar(g) +
     `<h2 style="margin-top:22px">All workouts</h2>` +
     (ks
       .map(k => {
         const ss = g[k].sort((a, b) => a.t - b.t),
           ids = [...new Set(ss.map(s => s.exId))];
         return (
-          `<div class=card><div class=hd><b>${esc(ss[0].wn || 'Workout')}</b><span class=m>${dstr(+k)} · ${vol(ss)} reps</span></div>` +
+          `<div class=card><div class=hd><b>${esc(ss[0].wn || 'Workout')}</b><span class=m>${dateText(+k)} · ${totalReps(ss)} reps</span></div>` +
           ids
             .map(id => {
               const xs = ss.filter(s => s.exId == id);
-              return `<div class=hl style="display:block"><div class=hd><b>${esc(EX(id)?.name || 'Deleted exercise')}</b><span class=m>${vol(xs)} reps</span></div><div class=m>${xs.map(s => `${wt(s.w)}×${s.r}${s.rir != null ? ' @' + rirTxt(s.rir) : ''}${s.test ? ' ★' : ''}`).join(' · ')}</div></div>`;
+              return `<div class=hl style="display:block"><div class=hd><b>${esc(exerciseById(id)?.name || 'Deleted exercise')}</b><span class=m>${totalReps(xs)} reps</span></div><div class=m>${xs.map(s => `${weightLabel(s.w)}×${s.r}${s.rir != null ? ' @' + rirLabel(s.rir) : ''}${s.test ? ' ★' : ''}`).join(' · ')}</div></div>`;
             })
             .join('') +
-          `<div class=row>${W && W.sess == k ? '' : `<button class=b data-a=wedOpen data-i=${k}>Edit workout</button>`}<button class=b data-a=wdel data-i=${k}>Delete workout</button></div></div>`
+          `<div class=row>${workout && workout.sess == k ? '' : `<button class=b data-a=wedOpen data-i=${k}>Edit workout</button>`}<button class=b data-a=wdel data-i=${k}>Delete workout</button></div></div>`
         );
       })
       .join('') || '<p class=m>No workouts logged yet. Sets appear here as soon as you tap ✓.</p>')
@@ -2206,58 +2225,59 @@ function rHist() {
 }
 
 /* ---------- edit a past workout (from History) ---------- */
-let WE = null,
-  WQ = ''; // the workout being edited; its add-exercise search text
-function wedOpen(sess) {
-  const ss = S.sets.filter(s => s.sess == sess).sort((a, b) => a.t - b.t),
+let editedWorkout = null,
+  editorAddQuery = ''; // the workout being edited; its add-exercise search text
+function openWorkoutEditor(sess) {
+  const ss = state.sets.filter(s => s.sess == sess).sort((a, b) => a.t - b.t),
     items = [];
   for (const s of ss) {
     let it = items.find(i => i.exId == s.exId);
     if (!it) items.push((it = { exId: s.exId, rows: [] }));
     it.rows.push({ id: s.id, w: s.w > 0 ? s.w : '', r: s.r, rir: s.rir ?? '', wu: !!s.wu, src: s });
   }
-  WE = { sess, wn: ss[0]?.wn || 'Workout', date: dk(sess), items };
-  WQ = '';
-  S.view = { t: 'wed' };
+  editedWorkout = { sess, wn: ss[0]?.wn || 'Workout', date: dayKey(sess), items };
+  editorAddQuery = '';
+  state.view = { t: 'wed' };
   render();
 }
-const wqBox = () => exSugg(WQ, null, e => `data-a=wedAdd data-x=${e.id}`, 'data-a=wedAddNew');
-function rWed() {
+const editorAddResults = () =>
+  exerciseSuggestions(editorAddQuery, null, e => `data-a=wedAdd data-x=${e.id}`, 'data-a=wedAddNew');
+function renderWorkoutEditor() {
   const row = (
     r,
     k,
     j,
-  ) => `<div class="eset${r.wu ? ' wu' : ''}" data-k=${k} data-j=${j}><input data-wf=w inputmode=decimal aria-label="Weight in kg, empty for bodyweight" value="${r.w === '' ? '' : fmt(r.w)}"><input data-wf=r inputmode=numeric aria-label=Reps value="${r.r === '' ? '' : fmt(r.r)}">${rirSel(`data-wf=rir aria-label="Reps in reserve"`, r.rir)}<button class=s data-a=wedRm data-k=${k} data-j=${j} aria-label="Remove set">×</button>
+  ) => `<div class="eset${r.wu ? ' wu' : ''}" data-k=${k} data-j=${j}><input data-wf=w inputmode=decimal aria-label="Weight in kg, empty for bodyweight" value="${r.w === '' ? '' : fmt(r.w)}"><input data-wf=r inputmode=numeric aria-label=Reps value="${r.r === '' ? '' : fmt(r.r)}">${rirSelect(`data-wf=rir aria-label="Reps in reserve"`, r.rir)}<button class=s data-a=wedRm data-k=${k} data-j=${j} aria-label="Remove set">×</button>
   <div class=inf><span>${r.wu ? 'Warm-up' : ''}</span><button class=lk data-a=wedWu data-k=${k} data-j=${j}>${r.wu ? 'Make working set' : 'Mark as warm-up'}</button></div></div>`;
   return (
     `<div class=hd><button class=b data-a=wedCancel>Cancel</button><button class="b p" data-a=wedSave>Save</button></div><h2>Edit workout</h2>
- <div class=card><label>Name<input data-wn value="${esc(WE.wn)}"></label><label>Date<input type=date data-wd value="${WE.date}"></label></div>` +
-    WE.items
+ <div class=card><label>Name<input data-wn value="${esc(editedWorkout.wn)}"></label><label>Date<input type=date data-wd value="${editedWorkout.date}"></label></div>` +
+    editedWorkout.items
       .map(
         (
           it,
           k,
-        ) => `<div class=card><div class=hd><b>${esc(EX(it.exId)?.name || 'Deleted exercise')}</b><button class=s style="width:40px" data-a=wedRmx data-k=${k} aria-label="Remove exercise">×</button></div>
+        ) => `<div class=card><div class=hd><b>${esc(exerciseById(it.exId)?.name || 'Deleted exercise')}</b><button class=s style="width:40px" data-a=wedRmx data-k=${k} aria-label="Remove exercise">×</button></div>
  <div class="eset hdr"><span>Weight (kg)</span><span>Reps</span><span>RIR</span><span></span></div>${it.rows.map((r, j) => row(r, k, j)).join('')}
  <button class=b data-a=wedAddSet data-k=${k}>+ Set</button></div>`,
       )
       .join('') +
-    `<input id=wq placeholder="Add exercise: type a name" autocomplete=off enterkeyhint=done value="${esc(WQ)}" style="margin-top:12px"><div id=wqs>${wqBox()}</div>`
+    `<input id=wq placeholder="Add exercise: type a name" autocomplete=off enterkeyhint=done value="${esc(editorAddQuery)}" style="margin-top:12px"><div id=wqs>${editorAddResults()}</div>`
   );
 }
-async function wedSave() {
-  for (const it of WE.items)
+async function saveEditedWorkout() {
+  for (const it of editedWorkout.items)
     for (const r of it.rows) {
       if (!(+r.r > 0))
         return toast(
-          `Enter reps for every set of ${EX(it.exId)?.name || 'each exercise'}, or remove the set`,
+          `Enter reps for every set of ${exerciseById(it.exId)?.name || 'each exercise'}, or remove the set`,
         );
       if (r.rir !== '' && !(+r.rir >= 0 && +r.rir <= 10))
         return toast('RIR must be between 0 and 10, or empty');
     }
-  const old = S.sets.filter(s => s.sess == WE.sess),
-    o = new Date(WE.sess),
-    [y, mo, da] = (WE.date || dk(WE.sess)).split('-').map(Number),
+  const old = state.sets.filter(s => s.sess == editedWorkout.sess),
+    o = new Date(editedWorkout.sess),
+    [y, mo, da] = (editedWorkout.date || dayKey(editedWorkout.sess)).split('-').map(Number),
     sess = new Date(
       y,
       mo - 1,
@@ -2267,14 +2287,14 @@ async function wedSave() {
       o.getSeconds(),
       o.getMilliseconds(),
     ).getTime(),
-    dt = isFinite(sess) ? sess - WE.sess : 0,
-    ns = WE.sess + dt,
-    keep = new Set(WE.items.flatMap(i => i.rows.map(r => r.id).filter(Boolean))),
+    dt = isFinite(sess) ? sess - editedWorkout.sess : 0,
+    ns = editedWorkout.sess + dt,
+    keep = new Set(editedWorkout.items.flatMap(i => i.rows.map(r => r.id).filter(Boolean))),
     pd = old.find(s => s.pd)?.pd,
-    wn = WE.wn.trim().slice(0, 100) || 'Workout';
+    wn = editedWorkout.wn.trim().slice(0, 100) || 'Workout';
   let tmax = Math.max(ns, ...old.map(s => s.t + dt));
-  for (const s of old) if (!keep.has(s.id)) await del('sets', s.id);
-  for (const it of WE.items)
+  for (const s of old) if (!keep.has(s.id)) await dbDelete('sets', s.id);
+  for (const it of editedWorkout.items)
     for (const r of it.rows) {
       const rir = r.rir === '' ? null : +r.rir,
         rec = {
@@ -2292,19 +2312,19 @@ async function wedSave() {
       else delete rec.pd;
       if (r.wu) rec.wu = true;
       else delete rec.wu;
-      await put('sets', rec);
+      await dbPut('sets', rec);
     }
-  WE = null;
-  S.view = null;
-  if (CAL) CAL.sel = dk(ns);
-  await load();
+  editedWorkout = null;
+  state.view = null;
+  if (calendar) calendar.sel = dayKey(ns);
+  await loadState();
   render();
   toast('Workout saved');
 }
-function rTpl() {
+function renderPlans() {
   return (
-    ttl('Plans') +
-    S.tpl
+    pageTitle('Plans') +
+    state.tpl
       .map(
         t =>
           `<button class="b big" data-a=tplEdit data-i=${t.id}>${esc(t.name)}<small>${t.days.length} day${t.days.length > 1 ? 's' : ''}/week · ${t.weeks} weeks${t.active ? ' · active' : ''} · ${t.days.map(d => esc(d.name)).join(', ')}</small></button>`,
@@ -2314,8 +2334,8 @@ function rTpl() {
   );
 }
 
-function resizeDays(n) {
-  const d = E.days;
+function setDaysPerWeek(n) {
+  const d = draft.days;
   if (
     n < d.length &&
     d.slice(n).some(x => x.items.length) &&
@@ -2329,29 +2349,29 @@ function resizeDays(n) {
   render();
 }
 
-function rTple() {
+function renderPlanEditor() {
   const dpw = [1, 2, 3, 4, 5, 6, 7]
-    .map(n => `<option ${n == E.days.length ? 'selected' : ''}>${n}</option>`)
+    .map(n => `<option ${n == draft.days.length ? 'selected' : ''}>${n}</option>`)
     .join('');
   return (
-    `<button class=b data-a=back>‹ Back</button><label>Plan name<input data-b=name value="${esc(E.name)}"></label>
- <div class=row><label>Days per week<select data-dpw>${dpw}</select></label><label>Number of weeks<input type=number min=1 data-n data-b=weeks value="${E.weeks ?? 8}"></label></div>
+    `<button class=b data-a=back>‹ Back</button><label>Plan name<input data-b=name value="${esc(draft.name)}"></label>
+ <div class=row><label>Days per week<select data-dpw>${dpw}</select></label><label>Number of weeks<input type=number min=1 data-n data-b=weeks value="${draft.weeks ?? 8}"></label></div>
  <p class=m>Plan each exercise by <b>RIR</b> (sets, this plan's rep range, and a target RIR for each week) or by <b>% of 1RM</b> (sets × reps at a % of your 1RM; you log the RPE). You can still switch during the workout.</p>` +
-    E.days
+    draft.days
       .map(
         (dy, k) =>
           `<div class=card><label>Day ${k + 1} name<input data-b="days.${k}.name" value="${esc(dy.name)}"></label>` +
           dy.items
             .map((it, j) => {
-              const ex = EX(it.exId),
+              const ex = exerciseById(it.exId),
                 b = `days.${k}.items.${j}`,
                 f = (x, l) =>
                   `<label>${l}<input type=number step=any data-n data-b="${b}.${x}" value="${it[x] ?? ''}" placeholder="${ex ? (ex[x] ?? '') : ''}"></label>`;
-              const sw = TR && TR.k == k && TR.j == j;
+              const sw = planReplace && planReplace.k == k && planReplace.j == j;
               return (
                 `<div class=card style="background:var(--bg)">` +
                 (sw
-                  ? `<div class=row><input data-tr="${k}.${j}" placeholder="Replace ${esc(ex?.name || 'exercise')}: type a name" autocomplete=off enterkeyhint=done value="${esc(TR.q)}"><button class=b style="flex:0 0 auto" data-a=tplSwapX>Cancel</button></div><div id=trs>${trBox()}</div>`
+                  ? `<div class=row><input data-tr="${k}.${j}" placeholder="Replace ${esc(ex?.name || 'exercise')}: type a name" autocomplete=off enterkeyhint=done value="${esc(planReplace.q)}"><button class=b style="flex:0 0 auto" data-a=tplSwapX>Cancel</button></div><div id=trs>${planReplaceResults()}</div>`
                   : `<div class=row><button class="b exsw" data-a=tplSwap data-k=${k} data-i=${j}><span>${esc(ex?.name || 'Deleted exercise')}</span><span class=m>⇄ Replace</span></button><button class=s style="flex:0 0 40px" data-a=tplDelItem data-k=${k} data-i=${j} aria-label="Remove exercise">×</button></div>`) +
                 `<div class=segrow><span class=m>Track by</span><span class=seg role=group aria-label="Track by"><button class="${it.mode == 'pct' ? '' : 'on'}" data-a=tplMode data-k=${k} data-i=${j} data-m=rir>RIR</button><button class="${it.mode == 'pct' ? 'on' : ''}" data-a=tplMode data-k=${k} data-i=${j} data-m=pct>% 1RM</button></span></div>` +
                 (it.mode == 'pct'
@@ -2363,62 +2383,62 @@ function rTple() {
                       )
                       .join('') +
                     `<button class=b data-a=tplAddLine data-k=${k} data-i=${j}>+ Line</button>`
-                  : ((it.rirW = rirWeeks(it, Math.max(1, Math.round(+E.weeks || 8)), ex)),
+                  : ((it.rirW = weeklyRirTargets(it, Math.max(1, Math.round(+draft.weeks || 8)), ex)),
                     `<div class=row>${f('n', 'Sets').replace(/placeholder="[^"]*"/, '')}${f('lo', 'Reps min')}${f('hi', 'Reps max')}</div>
-     <div class=m style="margin-top:6px">Target RIR per week</div><div class=wkr>${it.rirW.map((v, w) => `<label>W${w + 1}${rirSel(`data-n data-b="${b}.rirW.${w}" aria-label="Week ${w + 1} target RIR"`, v, { max5: true, blank: false })}</label>`).join('')}</div>`)) +
+     <div class=m style="margin-top:6px">Target RIR per week</div><div class=wkr>${it.rirW.map((v, w) => `<label>W${w + 1}${rirSelect(`data-n data-b="${b}.rirW.${w}" aria-label="Week ${w + 1} target RIR"`, v, { max5: true, blank: false })}</label>`).join('')}</div>`)) +
                 `</div>`
               );
             })
             .join('') +
-          `<input data-tq=${k} placeholder="Add exercise: type a name" autocomplete=off enterkeyhint=done value="${TQ.k == k ? esc(TQ.q) : ''}" style="margin-top:6px"><div id=tqs${k}>${TQ.k == k ? tqBox(k) : ''}</div></div>`,
+          `<input data-tq=${k} placeholder="Add exercise: type a name" autocomplete=off enterkeyhint=done value="${planAddSearch.k == k ? esc(planAddSearch.q) : ''}" style="margin-top:6px"><div id=tqs${k}>${planAddSearch.k == k ? planAddResults(k) : ''}</div></div>`,
       )
       .join('') +
-    `<div class=row><button class="b p" data-a=tplSave>Save</button>${E.id ? '<button class=b data-a=tplDel>Delete</button>' : ''}</div>`
+    `<div class=row><button class="b p" data-a=tplSave>Save</button>${draft.id ? '<button class=b data-a=tplDel>Delete</button>' : ''}</div>`
   );
 }
 // BMI = kg / m². Categories are the WHO adult ranges; they don't account for muscle mass.
-const bmi = () => {
-  const w = BWv(),
-    h = HTv() / 100;
+const bmiValue = () => {
+  const w = bodyweight(),
+    h = height() / 100;
   return w > 0 && h > 0 ? Math.round((w / (h * h)) * 10) / 10 : null;
 };
-const bmiTxt = () => {
-  const b = bmi();
+const bmiText = () => {
+  const b = bmiValue();
   if (b == null) return '<span class=m>Enter weight and height to see your BMI.</span>';
   return `BMI <b>${b.toFixed(1)}</b> <span class=m>· ${b < 18.5 ? 'underweight' : b < 25 ? 'normal range' : b < 30 ? 'overweight range' : 'obese range'} (WHO ranges; muscle counts as weight)</span>`;
 };
-function rSet() {
+function renderSettings() {
   return `<button class=b data-a=back>‹ Back</button><h2 style="margin-top:12px">Settings</h2>
  <div class=card><b>You</b><div class=m>Bodyweight is used for exercises where the load includes bodyweight. Update it whenever it changes; logged sets keep the weight you had then.</div>
- <div class=body2><label>Weight<span class=row><input id=bwi type=number step=any inputmode=decimal placeholder="kg" aria-label="Bodyweight in kg" value="${BWv() || ''}"><span class=m>kg</span></span></label>
- <label>Height<span class=row><input id=hti type=number step=any inputmode=decimal placeholder="cm" aria-label="Height in cm" value="${HTv() || ''}"><span class=m>cm</span></span></label></div>
- <div class=bmi id=bmi>${bmiTxt()}</div></div>
- ${ghCard()}
- <div class=card><b>Manual backup</b><div class=m>${lastBackup() ? 'Last backup ' + age(lastBackup()) : 'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
+ <div class=body2><label>Weight<span class=row><input id=bwi type=number step=any inputmode=decimal placeholder="kg" aria-label="Bodyweight in kg" value="${bodyweight() || ''}"><span class=m>kg</span></span></label>
+ <label>Height<span class=row><input id=hti type=number step=any inputmode=decimal placeholder="cm" aria-label="Height in cm" value="${height() || ''}"><span class=m>cm</span></span></label></div>
+ <div class=bmi id=bmi>${bmiText()}</div></div>
+ ${githubBackupCard()}
+ <div class=card><b>Manual backup</b><div class=m>${lastBackupTime() ? 'Last backup ' + ageText(lastBackupTime()) : 'No backup yet'}. Export saves everything to one file (share it to Drive, iCloud or Files). Import replaces all current data.</div>
  <div class=row><button class=b data-a=backup>Export</button><button class=b data-a=restore>Import</button></div><input type=file id=imp accept=".json,application/json" hidden></div>
  <div class=card><b>App</b><div class=m>Lift Log <span id=verl>v${VER}</span></div><button class=b style="width:100%;margin-top:8px" data-a=upd id=updb>Check for updates</button></div>`;
 }
 /* ---------- phone back gesture / back button: close the open page instead of leaving the app ---------- */
-const depth = () => (S.view || PICK || (W && !LAND && S.tab == 'train') ? 1 : 0);
-let popping = false;
-function navSync() {
-  const d = depth(),
+const pageDepth = () => (state.view || picker || (workout && !showTrainHome && state.tab == 'train') ? 1 : 0);
+let ignoreNextPop = false;
+function syncBackGesture() {
+  const d = pageDepth(),
     cur = history.state?.ll || 0;
   if (d && !cur) history.pushState({ ll: 1 }, '');
   else if (!d && cur) {
-    popping = true;
+    ignoreNextPop = true;
     history.back();
   }
 }
 addEventListener('popstate', () => {
-  if (popping) {
-    popping = false;
+  if (ignoreNextPop) {
+    ignoreNextPop = false;
     return;
   }
-  if (!depth()) return;
-  if (PICK) A.pickCancel();
-  else if (S.view) A.back();
-  else A.toLanding();
+  if (!pageDepth()) return;
+  if (picker) actions.pickCancel();
+  else if (state.view) actions.back();
+  else actions.toLanding();
 });
 try {
   history.replaceState({ ll: 0 }, '');
@@ -2426,20 +2446,22 @@ try {
 
 // The bottom bar is built once and kept; only <main> is redrawn. Rebuilding the bar on every
 // render made it flicker on tab changes (the phone repainted it after long pages like History).
-let RV = '',
-  LY = 0;
+let renderedPage = '',
+  listScrollY = 0;
 function render() {
-  const v = S.view?.t,
+  const v = state.view?.t,
     body =
       v == 'exd'
-        ? rExd()
+        ? renderExerciseDetail()
         : v == 'tple'
-          ? rTple()
+          ? renderPlanEditor()
           : v == 'wed'
-            ? rWed()
+            ? renderWorkoutEditor()
             : v == 'set'
-              ? rSet()
-              : { train: rTrain, hist: rHist, tpl: rTpl, ex: rEx }[S.tab]();
+              ? renderSettings()
+              : { train: renderTrain, hist: renderHistory, tpl: renderPlans, ex: renderExercises }[
+                  state.tab
+                ]();
   let m = $('main', app),
     nav = $('nav', app);
   if (!m || !nav) {
@@ -2449,31 +2471,31 @@ function render() {
       ['tpl', 'Plans'],
       ['ex', 'Exercises'],
     ]
-      .map(([k, l]) => `<button data-a=tab data-i=${k}>${NI[k]}${l}</button>`)
+      .map(([k, l]) => `<button data-a=tab data-i=${k}>${NAV_ICONS[k]}${l}</button>`)
       .join('')}</nav>`;
     m = $('main', app);
     nav = $('nav', app);
   }
   m.removeAttribute('style');
   m.className = '';
-  if (SL) {
+  if (slideDir) {
     void m.offsetWidth;
-    m.className = 'sl' + (SL > 0 ? 'r' : 'l');
+    m.className = 'sl' + (slideDir > 0 ? 'r' : 'l');
   } // restart the slide-in animation
-  const vk = S.view ? S.view.t : '',
-    open = vk && !RV,
-    close = !vk && RV;
-  if (open) LY = m.scrollTop;
+  const vk = state.view ? state.view.t : '',
+    open = vk && !renderedPage,
+    close = !vk && renderedPage;
+  if (open) listScrollY = m.scrollTop;
   m.innerHTML = body;
   if (open) m.scrollTop = 0;
-  else if (close) m.scrollTop = LY;
-  RV = vk; // pages open at the top; Back returns to where you were in the list
+  else if (close) m.scrollTop = listScrollY;
+  renderedPage = vk; // pages open at the top; Back returns to where you were in the list
   nav.querySelectorAll('button').forEach(b => {
-    b.classList.toggle('on', b.dataset.i == S.tab);
+    b.classList.toggle('on', b.dataset.i == state.tab);
     b.classList.remove('nx');
   });
-  SL = 0;
-  navSync();
+  slideDir = 0;
+  syncBackGesture();
 }
 /* ---------- events ---------- */
 const setPath = (o, p, v) => {
@@ -2485,56 +2507,56 @@ const setPath = (o, p, v) => {
 app.addEventListener('input', e => {
   const t = e.target,
     s = t.closest('.set');
-  if (WE && S.view?.t == 'wed') {
+  if (editedWorkout && state.view?.t == 'wed') {
     if (t.dataset.wf != null) {
       const e = t.closest('.eset');
-      WE.items[e.dataset.k].rows[e.dataset.j][t.dataset.wf] = t.value === '' ? '' : +t.value;
+      editedWorkout.items[e.dataset.k].rows[e.dataset.j][t.dataset.wf] = t.value === '' ? '' : +t.value;
       if (t.tagName == 'SELECT') t.classList.toggle('ph', t.value === '');
       return;
     }
     if (t.dataset.wn != null) {
-      WE.wn = t.value;
+      editedWorkout.wn = t.value;
       return;
     }
     if (t.dataset.wd != null) {
-      WE.date = t.value;
+      editedWorkout.date = t.value;
       return;
     }
     if (t.id == 'wq') {
-      WQ = t.value;
-      $('#wqs').innerHTML = wqBox();
+      editorAddQuery = t.value;
+      $('#wqs').innerHTML = editorAddResults();
       return;
     }
   }
   if (t.id == 'bwi') {
     const v = +t.value;
     if (t.value === '') {
-      ls('bw', '');
-      touch();
+      lsSet('bw', '');
+      markDataChanged();
     } else if (v >= 20 && v <= 400) {
-      ls('bw', v);
-      touch();
+      lsSet('bw', v);
+      markDataChanged();
     }
-    $('#bmi').innerHTML = bmiTxt();
+    $('#bmi').innerHTML = bmiText();
     return;
   }
   if (t.id == 'hti') {
     const v = +t.value;
     if (t.value === '') {
-      ls('ht', '');
-      touch();
+      lsSet('ht', '');
+      markDataChanged();
     } else if (v >= 100 && v <= 250) {
-      ls('ht', v);
-      touch();
+      lsSet('ht', v);
+      markDataChanged();
     }
-    $('#bmi').innerHTML = bmiTxt();
+    $('#bmi').innerHTML = bmiText();
     return;
   }
   if (t.id == 'exq') {
-    EQ = t.value;
+    exerciseFilter = t.value;
     let any = false;
     document.querySelectorAll('.exr').forEach(b => {
-      const h = exHit(b.dataset.q);
+      const h = matchesFilter(b.dataset.q);
       b.hidden = !h;
       any ||= h;
     });
@@ -2542,24 +2564,24 @@ app.addEventListener('input', e => {
     return;
   }
   if (t.id == 'pq') {
-    PQ = t.value;
-    $('#plist').innerHTML = pickBox();
+    pickerQuery = t.value;
+    $('#plist').innerHTML = pickerResults();
     return;
   }
-  if (t.dataset.tr != null && TR) {
-    TR.q = t.value;
-    $('#trs').innerHTML = trBox();
+  if (t.dataset.tr != null && planReplace) {
+    planReplace.q = t.value;
+    $('#trs').innerHTML = planReplaceResults();
     return;
   }
   if (t.dataset.tq != null) {
-    TQ = { k: +t.dataset.tq, q: t.value };
-    $('#tqs' + t.dataset.tq).innerHTML = tqBox(TQ.k);
+    planAddSearch = { k: +t.dataset.tq, q: t.value };
+    $('#tqs' + t.dataset.tq).innerHTML = planAddResults(planAddSearch.k);
     return;
   }
   if (s && t.dataset.f) {
-    const r = W.items[s.dataset.i].rows[s.dataset.j],
+    const r = workout.items[s.dataset.i].rows[s.dataset.j],
       f = t.dataset.f;
-    const it = W.items[s.dataset.i],
+    const it = workout.items[s.dataset.i],
       v = t.value === '' ? '' : +t.value;
     r.auto = false;
     delete r.adj;
@@ -2567,11 +2589,11 @@ app.addEventListener('input', e => {
       r.w = v === '' ? '' : it.ref > 0 ? Math.max(0, (v / 100) * it.ref - (it.bwo || 0)) : '';
     else r[f] = v;
     if (t.tagName == 'SELECT') t.classList.toggle('ph', t.value === '');
-    saveW();
-    updInfo(s);
-  } else if (t.dataset.b && E) {
+    saveWorkout();
+    updateSetInfo(s);
+  } else if (t.dataset.b && draft) {
     setPath(
-      E,
+      draft,
       t.dataset.b,
       t.type == 'checkbox' ? t.checked : t.dataset.n != null ? (t.value === '' ? '' : +t.value) : t.value,
     );
@@ -2580,19 +2602,19 @@ app.addEventListener('input', e => {
 });
 app.addEventListener('change', e => {
   if (e.target.id == 'imp') importData(e.target.files[0]);
-  else if (e.target.dataset.dpw != null) resizeDays(+e.target.value);
+  else if (e.target.dataset.dpw != null) setDaysPerWeek(+e.target.value);
   else if (e.target.dataset.rr != null) render();
 });
 app.addEventListener('focusin', e => {
   const t = e.target;
-  if (t.dataset?.tq == null || TQ.k === +t.dataset.tq) return;
-  const old = TQ.k;
-  TQ = { k: +t.dataset.tq, q: t.value };
+  if (t.dataset?.tq == null || planAddSearch.k === +t.dataset.tq) return;
+  const old = planAddSearch.k;
+  planAddSearch = { k: +t.dataset.tq, q: t.value };
   if (old != null) {
     const ob = $('#tqs' + old);
     if (ob) ob.innerHTML = '';
   }
-  $('#tqs' + TQ.k).innerHTML = tqBox(TQ.k);
+  $('#tqs' + planAddSearch.k).innerHTML = planAddResults(planAddSearch.k);
 });
 app.addEventListener('keydown', e => {
   if (e.key != 'Enter') return;
@@ -2614,18 +2636,18 @@ app.addEventListener('keydown', e => {
 app.addEventListener('submit', e => {
   if (e.target.id == 'ghf') {
     e.preventDefault();
-    A.ghSave();
+    actions.ghSave();
   }
 });
-const TABS = ['train', 'hist', 'tpl', 'ex'],
-  TN = { train: 'Train', hist: 'History', tpl: 'Plans', ex: 'Exercises' };
-let sx,
-  sy,
-  sm,
-  sd,
-  SL = 0;
-const TH = 70;
-const hint = () => {
+const TAB_ORDER = ['train', 'hist', 'tpl', 'ex'],
+  TAB_NAMES = { train: 'Train', hist: 'History', tpl: 'Plans', ex: 'Exercises' };
+let swipeX,
+  swipeY,
+  swipeState,
+  swipeDx,
+  slideDir = 0;
+const SWIPE_DISTANCE = 70;
+const swipeHint = () => {
   let h = $('#sh');
   if (!h) {
     h = document.createElement('div');
@@ -2634,7 +2656,7 @@ const hint = () => {
   }
   return h;
 };
-const swEnd = () => {
+const endSwipe = () => {
   const m = $('main');
   if (m) {
     m.style.transition = 'transform .18s,opacity .18s';
@@ -2643,19 +2665,19 @@ const swEnd = () => {
   }
   $('#sh')?.remove();
   document.querySelectorAll('nav button.nx').forEach(x => x.classList.remove('nx'));
-  sm = 0;
+  swipeState = 0;
 };
 document.addEventListener(
   'touchstart',
   e => {
-    sm = 0;
-    if (e.touches.length != 1 || S.view || e.target.closest('input,textarea,select,nav,[data-noswipe]'))
+    swipeState = 0;
+    if (e.touches.length != 1 || state.view || e.target.closest('input,textarea,select,nav,[data-noswipe]'))
       return;
     const t = e.touches[0];
-    sx = t.clientX;
-    sy = t.clientY;
-    sm = 1;
-    sd = 0;
+    swipeX = t.clientX;
+    swipeY = t.clientY;
+    swipeState = 1;
+    swipeDx = 0;
     const m = $('main');
     if (m) m.style.transition = 'none';
   },
@@ -2664,33 +2686,33 @@ document.addEventListener(
 document.addEventListener(
   'touchmove',
   e => {
-    if (!sm) return;
+    if (!swipeState) return;
     const t = e.touches[0],
-      dx = t.clientX - sx,
-      dy = t.clientY - sy;
-    if (sm == 1) {
+      dx = t.clientX - swipeX,
+      dy = t.clientY - swipeY;
+    if (swipeState == 1) {
       if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
-        sm = 0;
+        swipeState = 0;
         return;
       }
       if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
-      sm = 2;
+      swipeState = 2;
     }
-    const i = TABS.indexOf(S.tab),
+    const i = TAB_ORDER.indexOf(state.tab),
       j = i + (dx < 0 ? 1 : -1),
-      ok = j >= 0 && j < TABS.length,
+      ok = j >= 0 && j < TAB_ORDER.length,
       m = $('main');
     if (!m) return;
-    const k = Math.min(1, Math.abs(dx) / TH);
-    sd = ok ? dx : 0;
+    const k = Math.min(1, Math.abs(dx) / SWIPE_DISTANCE);
+    swipeDx = ok ? dx : 0;
     m.style.transform = `translateX(${dx * (ok ? 0.55 : 0.15)}px)`;
     m.style.opacity = ok ? 1 - 0.35 * k : 1;
     document
       .querySelectorAll('nav button')
       .forEach((x, n) => x.classList.toggle('nx', ok && n == j && k >= 1));
-    const h = hint();
+    const h = swipeHint();
     if (ok) {
-      h.textContent = (dx < 0 ? '' : '‹ ') + TN[TABS[j]] + (dx < 0 ? ' ›' : '');
+      h.textContent = (dx < 0 ? '' : '‹ ') + TAB_NAMES[TAB_ORDER[j]] + (dx < 0 ? ' ›' : '');
       h.className = (dx < 0 ? 'r ' : 'l ') + (k >= 1 ? 'go' : '');
       h.style.opacity = Math.min(1, k * 1.4);
     } else h.style.opacity = 0;
@@ -2700,34 +2722,34 @@ document.addEventListener(
 document.addEventListener(
   'touchend',
   e => {
-    if (sm != 2) {
-      sm = 0;
+    if (swipeState != 2) {
+      swipeState = 0;
       return;
     }
-    const dx = sd,
-      i = TABS.indexOf(S.tab),
+    const dx = swipeDx,
+      i = TAB_ORDER.indexOf(state.tab),
       j = i + (dx < 0 ? 1 : -1);
-    if (Math.abs(dx) >= TH && j >= 0 && j < TABS.length) {
+    if (Math.abs(dx) >= SWIPE_DISTANCE && j >= 0 && j < TAB_ORDER.length) {
       $('#sh')?.remove();
-      sm = 0;
-      SL = dx < 0 ? 1 : -1;
-      A.tab(null, { i: TABS[j] });
-    } else swEnd();
+      swipeState = 0;
+      slideDir = dx < 0 ? 1 : -1;
+      actions.tab(null, { i: TAB_ORDER[j] });
+    } else endSwipe();
   },
   { passive: true },
 );
-document.addEventListener('touchcancel', swEnd, { passive: true });
+document.addEventListener('touchcancel', endSwipe, { passive: true });
 app.addEventListener('click', e => {
   const b = e.target.closest('[data-a]');
-  if (b && !b.disabled) A[b.dataset.a]?.(b.closest('.set'), b.dataset);
+  if (b && !b.disabled) actions[b.dataset.a]?.(b.closest('.set'), b.dataset);
 });
-const back = () => {
-  S.view = null;
-  E = null;
+const closePage = () => {
+  state.view = null;
+  draft = null;
   render();
 };
 
-const A = {
+const actions = {
   upd: async () => {
     const b = $('#updb'); // ask the server which version it serves (sw.js carries the same VER); update on demand
     b.textContent = 'Checking…';
@@ -2760,66 +2782,66 @@ const A = {
   backup: () => exportData(),
   restore: () => $('#imp').click(),
   tab: async (s, d) => {
-    PICK = null;
-    S.tab = d.i;
-    S.view = null;
-    E = null;
-    await load();
+    picker = null;
+    state.tab = d.i;
+    state.view = null;
+    draft = null;
+    await loadState();
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
   },
-  back,
+  back: closePage,
   start: (s, d) => {
     if (
-      W &&
+      workout &&
       !confirm(
-        `You have a workout in progress (${W.name}). Start a new one instead? Sets you already logged stay in History.`,
+        `You have a workout in progress (${workout.name}). Start a new one instead? Sets you already logged stay in History.`,
       )
     )
       return;
-    start(+d.i || null, +d.d || 0);
+    startWorkout(+d.i || null, +d.d || 0);
   },
   toLanding: () => {
-    LAND = true;
+    showTrainHome = true;
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
   },
   resume: () => {
-    LAND = false;
+    showTrainHome = false;
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
   },
   finish: async () => {
     if (confirm('Finish workout?')) {
-      W = null;
-      LAND = false;
-      saveW();
-      await load();
+      workout = null;
+      showTrainHome = false;
+      saveWorkout();
+      await loadState();
       render();
     }
   },
   pickAdd: () => {
-    PICK = { t: 'add', y: scY() };
-    PQ = '';
-    PALL = false;
+    picker = { t: 'add', y: mainScrollY() };
+    pickerQuery = '';
+    pickerShowAll = false;
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
     $('#pq')?.focus();
   },
   pickAll: () => {
-    PALL = true;
-    $('#plist').innerHTML = pickBox();
+    pickerShowAll = true;
+    $('#plist').innerHTML = pickerResults();
   },
   pickNew: async () => {
-    const id = await newEx($('#pq').value);
-    if (id) A.pickGo(null, { x: id });
+    const id = await createExercise($('#pq').value);
+    if (id) actions.pickGo(null, { x: id });
   },
   tplMode: (s, d) => {
-    const it = E.days[+d.k].items[+d.i],
-      x = EX(it.exId);
+    const it = draft.days[+d.k].items[+d.i],
+      x = exerciseById(it.exId);
     it.mode = d.m;
-    rememberMode(x, d.m);
-    if (d.m == 'pct' && !it.lines?.length) it.lines = [newLine()];
+    rememberTrackingMode(x, d.m);
+    if (d.m == 'pct' && !it.lines?.length) it.lines = [newPctLine()];
     if (d.m == 'rir') {
       it.n ??= 3;
       it.lo ??= x?.lo ?? 8;
@@ -2828,19 +2850,19 @@ const A = {
     render();
   },
   tplAddLine: (s, d) => {
-    const it = E.days[+d.k].items[+d.i],
+    const it = draft.days[+d.k].items[+d.i],
       l = it.lines[it.lines.length - 1];
-    it.lines.push(l ? { ...l } : newLine());
+    it.lines.push(l ? { ...l } : newPctLine());
     render();
   },
   tplRmLine: (s, d) => {
-    const it = E.days[+d.k].items[+d.i];
+    const it = draft.days[+d.k].items[+d.i];
     it.lines.splice(+d.l, 1);
-    if (!it.lines.length) it.lines.push(newLine());
+    if (!it.lines.length) it.lines.push(newPctLine());
     render();
   },
   tplSwap: (s, d) => {
-    TR = { k: +d.k, j: +d.i, q: '' };
+    planReplace = { k: +d.k, j: +d.i, q: '' };
     render();
     const q = $('[data-tr]');
     if (q) {
@@ -2849,34 +2871,34 @@ const A = {
     }
   },
   tplSwapX: () => {
-    TR = null;
+    planReplace = null;
     render();
   },
   tplSet: (s, d) => {
-    E.days[TR.k].items[TR.j].exId = +d.x;
-    TR = null;
+    draft.days[planReplace.k].items[planReplace.j].exId = +d.x;
+    planReplace = null;
     render();
   },
   tplSetNew: async () => {
-    const id = await newEx($('[data-tr]').value);
-    if (id) A.tplSet(null, { x: id });
+    const id = await createExercise($('[data-tr]').value);
+    if (id) actions.tplSet(null, { x: id });
   },
   tplPick: (s, d) => {
-    const x = EX(+d.x),
+    const x = exerciseById(+d.x),
       pm = x?.mode == 'pct';
-    E.days[+d.k].items.push(
+    draft.days[+d.k].items.push(
       pm
-        ? { exId: +d.x, mode: 'pct', lines: [newLine()] }
+        ? { exId: +d.x, mode: 'pct', lines: [newPctLine()] }
         : {
             exId: +d.x,
             mode: 'rir',
             n: 3,
             lo: x?.lo ?? 8,
             hi: x?.hi ?? 12,
-            rirW: Array(Math.max(1, Math.round(+E.weeks || 8))).fill(x?.rir ?? 2),
+            rirW: Array(Math.max(1, Math.round(+draft.weeks || 8))).fill(x?.rir ?? 2),
           },
     );
-    TQ = { k: +d.k, q: '' };
+    planAddSearch = { k: +d.k, q: '' };
     render();
     const q = $(`[data-tq="${d.k}"]`);
     if (q) {
@@ -2885,121 +2907,121 @@ const A = {
     }
   },
   tplPickNew: async (s, d) => {
-    const id = await newEx($(`[data-tq="${d.k}"]`).value);
-    if (id) A.tplPick(null, { k: d.k, x: id });
+    const id = await createExercise($(`[data-tq="${d.k}"]`).value);
+    if (id) actions.tplPick(null, { k: d.k, x: id });
   },
   repl: (s, d) => {
-    PICK = { t: 'rep', i: +d.i, y: scY() };
-    PQ = '';
-    PALL = false;
+    picker = { t: 'rep', i: +d.i, y: mainScrollY() };
+    pickerQuery = '';
+    pickerShowAll = false;
     render();
-    scTo(0, 0);
+    scrollMainTo(0, 0);
     $('#pq')?.focus();
   },
   pickCancel: () => {
-    const y = PICK.y;
-    PICK = null;
+    const y = picker.y;
+    picker = null;
     render();
-    scTo(0, y);
+    scrollMainTo(0, y);
   },
   pickGo: async (s, d) => {
     const exId = +d.x,
-      P = PICK;
+      P = picker;
     if (P.t == 'add') {
-      await addItem({ exId, n: 3 });
-      PICK = null;
-      saveW();
+      await addExerciseToWorkout({ exId, n: 3 });
+      picker = null;
+      saveWorkout();
       render();
-      scTo(0, 1e9);
+      scrollMainTo(0, 1e9);
       return;
     }
-    const it = W.items[P.i],
+    const it = workout.items[P.i],
       done = it.rows.filter(x => x.done);
     if (
       done.length &&
       !confirm(
-        `Replace ${EX(it.exId)?.name || 'this exercise'} with ${EX(exId).name}? Its ${done.length} logged set${done.length > 1 ? 's' : ''} in this workout will be deleted.`,
+        `Replace ${exerciseById(it.exId)?.name || 'this exercise'} with ${exerciseById(exId).name}? Its ${done.length} logged set${done.length > 1 ? 's' : ''} in this workout will be deleted.`,
       )
     )
       return;
-    for (const x of done) if (x.id) await del('sets', x.id);
-    await addItem({ exId, n: it.rows.filter(x => !x.wu).length || 3 });
-    W.items[P.i] = W.items.pop(); // swap the new item into the old one's place
-    PICK = null;
-    saveW();
+    for (const x of done) if (x.id) await dbDelete('sets', x.id);
+    await addExerciseToWorkout({ exId, n: it.rows.filter(x => !x.wu).length || 3 });
+    workout.items[P.i] = workout.items.pop(); // swap the new item into the old one's place
+    picker = null;
+    saveWorkout();
     render();
-    scTo(0, P.y);
+    scrollMainTo(0, P.y);
   },
-  rdec: () => setRest(W.rest - 15),
-  rinc: () => setRest(W.rest + 15),
+  rdec: () => setRest(workout.rest - 15),
+  rinc: () => setRest(workout.rest + 15),
   rstop: () => {
-    W.restEnd = 0;
-    saveW();
+    workout.restEnd = 0;
+    saveWorkout();
     tickRest();
   },
   redit: () => {
-    const v = prompt('Rest time (seconds or m:ss)', fmtT(W.rest));
+    const v = prompt('Rest time (seconds or m:ss)', clockText(workout.rest));
     if (v == null) return;
     const m = v.trim().match(/^(\d+):(\d{1,2})$/),
       n = m ? +m[1] * 60 + +m[2] : +v;
     n >= 15 && n <= 1800 ? setRest(n) : toast('Enter 15–1800 seconds, or m:ss');
   },
   planStart: async (s, d) => {
-    const t = S.tpl.find(x => x.id == d.i),
-      o = S.tpl.find(x => x.active && x.id != t.id);
+    const t = state.tpl.find(x => x.id == d.i),
+      o = state.tpl.find(x => x.active && x.id != t.id);
     if (o && !confirm(`Switch from "${o.name}" to "${t.name}"? The current plan will be closed.`)) return;
     if (o) {
       o.active = false;
-      await put('templates', o);
+      await dbPut('templates', o);
     }
     t.active = true;
     t.runStart = Date.now();
-    await put('templates', t);
-    await load();
+    await dbPut('templates', t);
+    await loadState();
     render();
   },
   planStop: async (s, d) => {
-    const t = S.tpl.find(x => x.id == d.i);
-    if (!planRun(t).done && !confirm('End this plan now? Your logged workouts stay in History.')) return;
+    const t = state.tpl.find(x => x.id == d.i);
+    if (!planProgress(t).done && !confirm('End this plan now? Your logged workouts stay in History.')) return;
     t.active = false;
-    await put('templates', t);
-    await load();
+    await dbPut('templates', t);
+    await loadState();
     render();
   },
   rms: async s => {
-    const it = W.items[s.dataset.i],
+    const it = workout.items[s.dataset.i],
       r = it.rows[s.dataset.j];
     if (r.done && !confirm('Remove this logged set?')) return;
-    if (r.id) await del('sets', r.id);
+    if (r.id) await dbDelete('sets', r.id);
     it.rows.splice(+s.dataset.j, 1);
-    saveW();
+    saveWorkout();
     render();
   },
   rmx: async (s, d) => {
-    const it = W.items[d.i],
+    const it = workout.items[d.i],
       done = it.rows.filter(x => x.done);
     if (
       !confirm(
         done.length
-          ? `Remove ${EX(it.exId)?.name || 'this exercise'} and delete its ${done.length} logged set(s) from this workout?`
+          ? `Remove ${exerciseById(it.exId)?.name || 'this exercise'} and delete its ${done.length} logged set(s) from this workout?`
           : 'Remove this exercise from the workout?',
       )
     )
       return;
-    for (const x of done) if (x.id) await del('sets', x.id);
-    W.items.splice(+d.i, 1);
-    saveW();
+    for (const x of done) if (x.id) await dbDelete('sets', x.id);
+    workout.items.splice(+d.i, 1);
+    saveWorkout();
     render();
   },
   addset: (s, d) => {
-    const rows = W.items[d.i].rows,
+    const rows = workout.items[d.i].rows,
       l = rows[rows.length - 1] || {};
     rows.push({ w: l.w ?? '', r: l.r ?? '', p: l.p ?? '' });
-    saveW();
+    saveWorkout();
     render();
   },
   step: (s, d) => {
-    const it = W.items[s.dataset.i],
+    const it = workout.items[s.dataset.i],
       r = it.rows[s.dataset.j]; // −/+ change the reps; the weight is typed
     if (r.r === '' || r.r == null) {
       if (+d.d < 0) return;
@@ -3009,13 +3031,13 @@ const A = {
     r.auto = false;
     delete r.adj;
     $('[data-f=r]', s).value = fmt(r.r);
-    saveW();
-    updInfo(s);
+    saveWorkout();
+    updateSetInfo(s);
   },
   log: async s => {
-    const it = W.items[s.dataset.i],
+    const it = workout.items[s.dataset.i],
       r = it.rows[s.dataset.j],
-      ex = EX(it.exId);
+      ex = exerciseById(it.exId);
     if (!(r.r > 0)) return toast('Enter reps'); // empty or 0 weight = bodyweight (BW)
     if (r.rir !== '' && r.rir != null && !(+r.rir >= 0 && +r.rir <= 10))
       return toast(
@@ -3023,51 +3045,51 @@ const A = {
           ? "RPE must be between 0 and 10. Leave it blank if you don't track it."
           : "RIR must be between 0 and 10. Leave it blank if you don't track it.",
       );
-    const test = !r.wu && isTest(r);
+    const test = !r.wu && isMaxTest(r);
     const rec = {
       exId: ex.id,
-      sess: W.sess,
-      wn: W.name,
-      pd: W.pd,
+      sess: workout.sess,
+      wn: workout.name,
+      pd: workout.pd,
       t: Date.now(),
       w: Math.round((+r.w || 0) * 100) / 100,
       r: r.r,
-      rir: hasR(r) ? +r.rir : null,
+      rir: hasRir(r) ? +r.rir : null,
       test,
     };
     if (r.wu) rec.wu = true;
-    if (ex.bwl && BWv()) rec.bw = BWv();
-    r.id = await put('sets', rec);
+    if (ex.bwl && bodyweight()) rec.bw = bodyweight();
+    r.id = await dbPut('sets', rec);
     r.done = true;
     delete r.adj;
-    if (it.mode == 'pct') await adjustPct(it, +s.dataset.j, ex);
-    else adjustNext(it, +s.dataset.j, ex);
-    saveW();
+    if (it.mode == 'pct') await adjustRemainingSetsPct(it, +s.dataset.j, ex);
+    else adjustRemainingSetsRir(it, +s.dataset.j, ex);
+    saveWorkout();
     startRest();
-    const x = info(r, ex),
-      pr = S.pr[ex.id];
+    const x = setInfo(r, ex),
+      pr = state.pr[ex.id];
     if (test) {
       const pb = ex.pb || 0,
         beat = r.w > pb;
-      if (beat) await put('exercises', { ...ex, pb: r.w });
+      if (beat) await dbPut('exercises', { ...ex, pb: r.w });
       if (
         confirm(
           `Save ${fmt(r.w)} as your current 1RM for ${ex.name}?` +
-            (pr ? `\nCurrent 1RM: ${fmt(pr.w)} (tested ${age(pr.t)})` : '') +
+            (pr ? `\nCurrent 1RM: ${fmt(pr.w)} (tested ${ageText(pr.t)})` : '') +
             (beat ? '\nNew lifetime PB!' : ''),
         )
       )
-        await put('pr_history', { exId: ex.id, w: r.w, t: rec.t, setId: r.id });
-      await load();
+        await dbPut('pr_history', { exId: ex.id, w: r.w, t: rec.t, setId: r.id });
+      await loadState();
     } else if (x.w) toast(`${x.s}. This e1RM is over 3% above your 1RM. Consider testing a new max.`);
     render();
   },
   mode: async (s, d) => {
-    const it = W.items[+d.i],
-      ex = EX(it.exId);
+    const it = workout.items[+d.i],
+      ex = exerciseById(it.exId);
     if (it.mode == d.m) return;
     if (d.m == 'pct' && !(it.ref > 0)) {
-      const ref = await refFor(ex);
+      const ref = await reference1RM(ex);
       if (!ref)
         return toast(
           `No 1RM for ${ex.name} yet. Add a tested 1RM in Exercises, or log a few RIR sets first.`,
@@ -3076,107 +3098,107 @@ const A = {
       it.refEst = ref.est;
     }
     it.mode = d.m;
-    saveW();
+    saveWorkout();
     render();
-    rememberMode(ex, d.m);
+    rememberTrackingMode(ex, d.m);
   },
   wu: async s => {
-    const r = W.items[s.dataset.i].rows[s.dataset.j];
+    const r = workout.items[s.dataset.i].rows[s.dataset.j];
     r.wu = !r.wu;
     if (!r.wu) delete r.wu;
     if (r.done && r.id) {
-      const x = await rq(st('sets').get(r.id));
+      const x = await request(store('sets').get(r.id));
       if (x) {
         if (r.wu) {
           x.wu = true;
           x.test = false;
         } else {
           delete x.wu;
-          x.test = isTest(x);
+          x.test = isMaxTest(x);
         }
-        await put('sets', x);
+        await dbPut('sets', x);
       }
     }
-    saveW();
+    saveWorkout();
     render();
   },
   undo: async s => {
-    const r = W.items[s.dataset.i].rows[s.dataset.j];
-    if (r.id) await del('sets', r.id);
+    const r = workout.items[s.dataset.i].rows[s.dataset.j];
+    if (r.id) await dbDelete('sets', r.id);
     r.done = false;
     delete r.id;
-    saveW();
+    saveWorkout();
     render();
   },
   settings: () => {
-    PICK = null;
-    S.view = { t: 'set' };
+    picker = null;
+    state.view = { t: 'set' };
     render();
   },
   exNew: () => {
-    E = { name: '', mode: 'rir', inc: 2, lo: 8, hi: 12, rir: 2 };
-    S.prl = [];
-    S.hist = [];
-    S.view = { t: 'exd' };
+    draft = { name: '', mode: 'rir', inc: 2, lo: 8, hi: 12, rir: 2 };
+    state.prl = [];
+    state.hist = [];
+    state.view = { t: 'exd' };
     render();
   },
   exOpen: async (s, d) => {
-    E = structuredClone(EX(+d.i));
-    S.view = { t: 'exd' };
-    await loadEx(E.id);
+    draft = structuredClone(exerciseById(+d.i));
+    state.view = { t: 'exd' };
+    await openExerciseHistory(draft.id);
   },
   exSave: async () => {
-    if (!E.name.trim()) return toast('Name required');
-    E.inc = +E.inc || 0;
-    if (E.inc < 0) return toast("Increment can't be negative");
-    E.mode = E.mode == 'pct' ? 'pct' : 'rir';
-    if (E.bwl) E.bwl = true;
-    else delete E.bwl;
-    E.lo ||= 8;
-    E.hi ||= Math.max(E.lo, 12);
-    E.rir ??= 2;
-    if (E.hi < E.lo) return toast('Reps max must be at least reps min');
-    E.wu = Math.min(4, Math.max(0, Math.round(+E.wu || 0)));
-    if (!E.wu) delete E.wu;
-    const cur = +E.cur || 0;
-    delete E.cur;
-    if (E.pb === '' || E.pb == null || !(+E.pb > 0)) delete E.pb;
-    else E.pb = +E.pb;
-    if (cur > 0 && !(E.pb >= cur)) E.pb = cur; // PB can't be below your current 1RM
-    const id = await put('exercises', E);
-    if (cur > 0 && cur !== S.pr[id]?.w) await put('pr_history', { exId: id, w: cur, t: Date.now() });
-    await load();
-    back();
+    if (!draft.name.trim()) return toast('Name required');
+    draft.inc = +draft.inc || 0;
+    if (draft.inc < 0) return toast("Increment can't be negative");
+    draft.mode = draft.mode == 'pct' ? 'pct' : 'rir';
+    if (draft.bwl) draft.bwl = true;
+    else delete draft.bwl;
+    draft.lo ||= 8;
+    draft.hi ||= Math.max(draft.lo, 12);
+    draft.rir ??= 2;
+    if (draft.hi < draft.lo) return toast('Reps max must be at least reps min');
+    draft.wu = Math.min(4, Math.max(0, Math.round(+draft.wu || 0)));
+    if (!draft.wu) delete draft.wu;
+    const cur = +draft.cur || 0;
+    delete draft.cur;
+    if (draft.pb === '' || draft.pb == null || !(+draft.pb > 0)) delete draft.pb;
+    else draft.pb = +draft.pb;
+    if (cur > 0 && !(draft.pb >= cur)) draft.pb = cur; // PB can't be below your current 1RM
+    const id = await dbPut('exercises', draft);
+    if (cur > 0 && cur !== state.pr[id]?.w) await dbPut('pr_history', { exId: id, w: cur, t: Date.now() });
+    await loadState();
+    closePage();
   },
   exDel: async () => {
     if (!confirm('Delete exercise with its PRs and set history?')) return;
-    for (const s of await all('sets', 'ex', E.id)) await del('sets', s.id);
-    for (const p of await all('pr_history', 'ex', E.id)) await del('pr_history', p.id);
-    await del('exercises', E.id);
-    await load();
-    back();
+    for (const s of await getAll('sets', 'ex', draft.id)) await dbDelete('sets', s.id);
+    for (const p of await getAll('pr_history', 'ex', draft.id)) await dbDelete('pr_history', p.id);
+    await dbDelete('exercises', draft.id);
+    await loadState();
+    closePage();
   },
   prAdd: async () => {
     const w = +$('#prw').value,
       d = $('#prd').value;
     if (!(w > 0)) return toast('Enter the tested weight');
-    await put('pr_history', { exId: E.id, w, t: new Date(d + 'T12:00').getTime() });
-    const ex = EX(E.id);
-    if (ex && w > (ex.pb || 0)) await put('exercises', { ...ex, pb: w });
-    await loadEx(E.id);
-    E.pb = EX(E.id)?.pb;
-    E.cur = S.pr[E.id]?.w ?? '';
+    await dbPut('pr_history', { exId: draft.id, w, t: new Date(d + 'T12:00').getTime() });
+    const ex = exerciseById(draft.id);
+    if (ex && w > (ex.pb || 0)) await dbPut('exercises', { ...ex, pb: w });
+    await openExerciseHistory(draft.id);
+    draft.pb = exerciseById(draft.id)?.pb;
+    draft.cur = state.pr[draft.id]?.w ?? '';
     render();
   },
   prDel: async (s, d) => {
-    await del('pr_history', +d.i);
-    await loadEx(E.id);
-    E.cur = S.pr[E.id]?.w ?? '';
+    await dbDelete('pr_history', +d.i);
+    await openExerciseHistory(draft.id);
+    draft.cur = state.pr[draft.id]?.w ?? '';
     render();
   },
   calnav: (s, d) => {
-    let m = CAL.m + +d.d,
-      y = CAL.y;
+    let m = calendar.m + +d.d,
+      y = calendar.y;
     if (m < 0) {
       m = 11;
       y--;
@@ -3184,50 +3206,50 @@ const A = {
       m = 0;
       y++;
     }
-    CAL.m = m;
-    CAL.y = y;
-    CAL.sel = null;
+    calendar.m = m;
+    calendar.y = y;
+    calendar.sel = null;
     render();
   },
   caltoday: () => {
     const n = new Date();
-    CAL.y = n.getFullYear();
-    CAL.m = n.getMonth();
-    CAL.sel = null;
+    calendar.y = n.getFullYear();
+    calendar.m = n.getMonth();
+    calendar.sel = null;
     render();
   },
   calday: (s, d) => {
-    CAL.sel = CAL.sel == d.k ? null : d.k;
+    calendar.sel = calendar.sel == d.k ? null : d.k;
     render();
   },
-  wedOpen: (s, d) => wedOpen(+d.i),
+  wedOpen: (s, d) => openWorkoutEditor(+d.i),
   wedCancel: () => {
-    WE = null;
-    back();
+    editedWorkout = null;
+    closePage();
   },
-  wedSave: () => wedSave(),
+  wedSave: () => saveEditedWorkout(),
   wedRm: (s, d) => {
-    WE.items[+d.k].rows.splice(+d.j, 1);
+    editedWorkout.items[+d.k].rows.splice(+d.j, 1);
     render();
   },
   wedWu: (s, d) => {
-    const r = WE.items[+d.k].rows[+d.j];
+    const r = editedWorkout.items[+d.k].rows[+d.j];
     r.wu = !r.wu;
     render();
   },
   wedRmx: (s, d) => {
-    WE.items.splice(+d.k, 1);
+    editedWorkout.items.splice(+d.k, 1);
     render();
   },
   wedAddSet: (s, d) => {
-    const rs = WE.items[+d.k].rows,
+    const rs = editedWorkout.items[+d.k].rows,
       l = rs.filter(x => !x.wu).pop() || rs[rs.length - 1] || {};
     rs.push({ w: l.w ?? '', r: l.r ?? '', rir: l.rir ?? '', wu: false });
     render();
   },
   wedAdd: (s, d) => {
-    WE.items.push({ exId: +d.x, rows: [{ w: '', r: '', rir: '', wu: false }] });
-    WQ = '';
+    editedWorkout.items.push({ exId: +d.x, rows: [{ w: '', r: '', rir: '', wu: false }] });
+    editorAddQuery = '';
     render();
     const q = $('#wq');
     if (q) {
@@ -3235,49 +3257,49 @@ const A = {
     }
   },
   wedAddNew: async () => {
-    const id = await newEx($('#wq').value);
-    if (id) A.wedAdd(null, { x: id });
+    const id = await createExercise($('#wq').value);
+    if (id) actions.wedAdd(null, { x: id });
   },
   wdel: async (s, d) => {
     if (!confirm('Delete this workout?')) return;
-    for (const x of S.sets.filter(x => x.sess == d.i)) await del('sets', x.id);
-    await load();
+    for (const x of state.sets.filter(x => x.sess == d.i)) await dbDelete('sets', x.id);
+    await loadState();
     render();
   },
   sdel: async (s, d) => {
-    await del('sets', +d.i);
-    await loadEx(E.id);
+    await dbDelete('sets', +d.i);
+    await openExerciseHistory(draft.id);
   },
   tplNew: () => {
-    TQ = { k: null, q: '' };
-    TR = null;
-    E = { name: '', weeks: 8, days: [{ name: 'Day 1', items: [] }] };
-    S.view = { t: 'tple' };
+    planAddSearch = { k: null, q: '' };
+    planReplace = null;
+    draft = { name: '', weeks: 8, days: [{ name: 'Day 1', items: [] }] };
+    state.view = { t: 'tple' };
     render();
   },
   tplEdit: (s, d) => {
-    TQ = { k: null, q: '' };
-    TR = null;
-    E = structuredClone(S.tpl.find(t => t.id == d.i));
-    S.view = { t: 'tple' };
+    planAddSearch = { k: null, q: '' };
+    planReplace = null;
+    draft = structuredClone(state.tpl.find(t => t.id == d.i));
+    state.view = { t: 'tple' };
     render();
   },
   tplAdd: (s, d) => {
-    if (!S.ex.length) return toast('Create an exercise first');
-    E.days[+d.i].items.push({ exId: S.ex[0].id, n: 3, text: '' });
+    if (!state.ex.length) return toast('Create an exercise first');
+    draft.days[+d.i].items.push({ exId: state.ex[0].id, n: 3, text: '' });
     render();
   },
   tplDelItem: (s, d) => {
-    E.days[+d.k].items.splice(+d.i, 1);
+    draft.days[+d.k].items.splice(+d.i, 1);
     render();
   },
   tplSave: async () => {
-    if (!E.name.trim()) return toast('Name required');
-    E.weeks = Math.min(52, Math.max(1, Math.round(+E.weeks || 8)));
-    for (const dy of E.days) {
+    if (!draft.name.trim()) return toast('Name required');
+    draft.weeks = Math.min(52, Math.max(1, Math.round(+draft.weeks || 8)));
+    for (const dy of draft.days) {
       if (!dy.name.trim()) dy.name = 'Day';
       for (const it of dy.items) {
-        const x = EX(it.exId),
+        const x = exerciseById(it.exId),
           nm = x?.name || 'an exercise';
         delete it.text;
         if (it.mode != 'pct') {
@@ -3286,7 +3308,9 @@ const A = {
           it.n = Math.round(+pk(it.n, 3));
           it.lo = Math.round(+pk(it.lo, x?.lo ?? 8));
           it.hi = Math.round(+pk(it.hi, x?.hi ?? 12));
-          it.rirW = rirWeeks(it, E.weeks, x).map(v => (v === '' || v == null ? (x?.rir ?? 2) : +v));
+          it.rirW = weeklyRirTargets(it, draft.weeks, x).map(v =>
+            v === '' || v == null ? (x?.rir ?? 2) : +v,
+          );
           delete it.rir;
           if (!(it.n >= 1 && it.n <= 20 && it.lo >= 1 && it.hi >= it.lo && it.hi <= 50))
             return toast(`Check ${nm}: sets 1–20, and reps min ≤ reps max`);
@@ -3304,21 +3328,21 @@ const A = {
         }
       }
     }
-    await put('templates', E);
-    await load();
-    back();
+    await dbPut('templates', draft);
+    await loadState();
+    closePage();
   },
   tplDel: async () => {
     if (confirm('Delete this plan?')) {
-      await del('templates', E.id);
-      await load();
-      back();
+      await dbDelete('templates', draft.id);
+      await loadState();
+      closePage();
     }
   },
 };
-function lastBackup() {
+function lastBackupTime() {
   try {
-    return +localStorage.getItem(LSP + 'lb') || 0;
+    return +localStorage.getItem(LS_PREFIX + 'lb') || 0;
   } catch {
     return 0;
   }
@@ -3327,9 +3351,9 @@ function lastBackup() {
 const STORES = ['exercises', 'templates', 'pr_history', 'sets'];
 async function exportData() {
   const d = { app: 'liftlog', v: 1, t: Date.now() };
-  for (const n of STORES) d[n] = await all(n);
-  d.bw = BWv() || undefined;
-  d.ht = HTv() || undefined;
+  for (const n of STORES) d[n] = await getAll(n);
+  d.bw = bodyweight() || undefined;
+  d.ht = height() || undefined;
   const name = `liftlog-${new Date().toISOString().slice(0, 10)}.json`,
     f = new File([JSON.stringify(d)], name, { type: 'application/json' });
   try {
@@ -3343,13 +3367,13 @@ async function exportData() {
     a.click();
   }
   try {
-    localStorage.setItem(LSP + 'lb', Date.now());
+    localStorage.setItem(LS_PREFIX + 'lb', Date.now());
   } catch {}
   toast('Backup exported');
   render();
 }
 /* ---------- import validation: rebuild every record from known fields only ---------- */
-function clean(d) {
+function sanitizeBackup(d) {
   const num = (x, k) => {
       if (typeof x != 'number' || !isFinite(x)) throw new Error('bad ' + k);
       return x;
@@ -3443,73 +3467,76 @@ async function importData(f) {
 }
 async function applyBackup(d) {
   try {
-    d = clean(d);
+    d = sanitizeBackup(d);
   } catch (e) {
     toast('Backup file is invalid (' + e.message + '). Nothing was changed.');
     return false;
   }
   if (
     !confirm(
-      `Replace ALL current data with the backup from ${dstr(d.t)}? (${d.sets.length} sets, ${d.exercises.length} exercises)`,
+      `Replace ALL current data with the backup from ${dateText(d.t)}? (${d.sets.length} sets, ${d.exercises.length} exercises)`,
     )
   )
     return false;
   for (const n of STORES) {
-    await rq(st(n, 'readwrite').clear());
-    for (const o of d[n]) await put(n, o);
+    await request(store(n, 'readwrite').clear());
+    for (const o of d[n]) await dbPut(n, o);
   }
-  if (d.bw > 0) ls('bw', d.bw);
-  if (d.ht >= 100 && d.ht <= 250) ls('ht', d.ht);
-  W = null;
-  saveW();
-  S.view = null;
-  E = null;
-  await load();
+  if (d.bw > 0) lsSet('bw', d.bw);
+  if (d.ht >= 100 && d.ht <= 250) lsSet('ht', d.ht);
+  workout = null;
+  saveWorkout();
+  state.view = null;
+  draft = null;
+  await loadState();
   render();
   toast('Backup restored');
   return true;
 }
 
 /* ---------- automatic backup to a private GitHub repo ---------- */
-const ghCfg = () => {
+const githubConfig = () => {
   try {
-    return JSON.parse(lg('gh') || 'null');
+    return JSON.parse(lsGet('gh') || 'null');
   } catch {
     return null;
   }
 };
-const ghUrl = g => `https://api.github.com/repos/${g.repo}/contents/liftlog-backup.json`;
-const ghH = (g, a = 'application/vnd.github+json') => ({ Authorization: 'Bearer ' + g.token, Accept: a });
-function touch() {
-  ls('dirty', '1');
-  clearTimeout(bt);
-  bt = setTimeout(autoBackup, 15000);
+const githubFileUrl = g => `https://api.github.com/repos/${g.repo}/contents/liftlog-backup.json`;
+const githubHeaders = (g, a = 'application/vnd.github+json') => ({
+  Authorization: 'Bearer ' + g.token,
+  Accept: a,
+});
+function markDataChanged() {
+  lsSet('dirty', '1');
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(autoBackup, 15000);
 }
-let pq = Promise.resolve();
-const ghPush = g =>
-  (pq = pq
+let pushQueue = Promise.resolve();
+const githubPush = g =>
+  (pushQueue = pushQueue
     .catch(() => {})
     .then(async () => {
       try {
-        return await ghPush1(g);
+        return await githubPushOnce(g);
       } catch (e) {
-        if (/ 409| 422/.test(e.message)) return await ghPush1(g);
+        if (/ 409| 422/.test(e.message)) return await githubPushOnce(g);
         throw e;
       }
     }));
-async function ghPush1(g) {
+async function githubPushOnce(g) {
   let sha;
-  const r0 = await fetch(ghUrl(g), { headers: ghH(g), cache: 'no-store' });
+  const r0 = await fetch(githubFileUrl(g), { headers: githubHeaders(g), cache: 'no-store' });
   if (r0.ok) sha = (await r0.json()).sha;
   else if (r0.status != 404) throw new Error('GitHub error ' + r0.status);
   const d = { app: 'liftlog', v: 1, t: Date.now() };
-  for (const n of STORES) d[n] = await all(n);
-  d.bw = BWv() || undefined;
-  d.ht = HTv() || undefined;
-  const r = await fetch(ghUrl(g), {
+  for (const n of STORES) d[n] = await getAll(n);
+  d.bw = bodyweight() || undefined;
+  d.ht = height() || undefined;
+  const r = await fetch(githubFileUrl(g), {
     method: 'PUT',
     cache: 'no-store',
-    headers: ghH(g),
+    headers: githubHeaders(g),
     body: JSON.stringify({
       message: 'Lift Log backup',
       content: btoa(unescape(encodeURIComponent(JSON.stringify(d)))),
@@ -3518,51 +3545,54 @@ async function ghPush1(g) {
   });
   if (!r.ok)
     throw new Error('GitHub error ' + r.status + (r.status == 422 ? ' (stale file version, try again)' : ''));
-  ls('lb', Date.now());
-  ls('dirty', '0');
-  ls('gherr', '');
+  lsSet('lb', Date.now());
+  lsSet('dirty', '0');
+  lsSet('gherr', '');
 }
-async function ghPull(g) {
-  const r = await fetch(ghUrl(g), { headers: ghH(g, 'application/vnd.github.raw+json'), cache: 'no-store' });
+async function githubPull(g) {
+  const r = await fetch(githubFileUrl(g), {
+    headers: githubHeaders(g, 'application/vnd.github.raw+json'),
+    cache: 'no-store',
+  });
   if (r.status == 404) return null;
   if (!r.ok) throw new Error('GitHub error ' + r.status);
   return JSON.parse(await r.text());
 }
 async function autoBackup() {
-  const g = ghCfg();
-  if (!g || !navigator.onLine || (!S.ex.length && !S.sets.length)) return;
+  const g = githubConfig();
+  if (!g || !navigator.onLine || (!state.ex.length && !state.sets.length)) return;
   try {
-    await ghPush(g);
+    await githubPush(g);
   } catch (e) {
-    ls('gherr', 'Last automatic backup failed: ' + e.message);
+    lsSet('gherr', 'Last automatic backup failed: ' + e.message);
   }
-  if (S.view?.t == 'set') render();
+  if (state.view?.t == 'set') render();
 }
-const DEFREPO = 'Germani144/lift-log-data';
-function ghCard() {
-  const g = ghCfg(),
-    lb = lastBackup(),
-    er = lg('gherr');
+const DEFAULT_BACKUP_REPO = 'Germani144/lift-log-data';
+function githubBackupCard() {
+  const g = githubConfig(),
+    lb = lastBackupTime(),
+    er = lsGet('gherr');
   return (
     `<div class=card><b>Automatic backup (GitHub)</b>` +
     (g
-      ? `<div class=m>On → ${esc(g.repo)}. Saves a few seconds after each change${lb ? '. Last backup ' + age(lb) : ''}.</div>${er ? `<div class=wr>${esc(er)}</div>` : ''}<div class=row><button class=b data-a=ghNow>Back up now</button><button class=b data-a=ghRestore>Restore</button><button class=b data-a=ghOff>Turn off</button></div>`
-      : `<div class=m>Use a <b>private</b> repo just for backups and a fine-grained token limited to that repo with Contents: read and write. Don't use your Pages repo.</div><form id=ghf><input name=username autocomplete=username value="${esc(DEFREPO)}" hidden><label>Repo<input id=ghr value="${esc(DEFREPO)}" autocapitalize=off></label><label>Token<input id=ght name=password type=password autocomplete=current-password></label><button class="b p" type=submit>Turn on</button></form>`) +
+      ? `<div class=m>On → ${esc(g.repo)}. Saves a few seconds after each change${lb ? '. Last backup ' + ageText(lb) : ''}.</div>${er ? `<div class=wr>${esc(er)}</div>` : ''}<div class=row><button class=b data-a=ghNow>Back up now</button><button class=b data-a=ghRestore>Restore</button><button class=b data-a=ghOff>Turn off</button></div>`
+      : `<div class=m>Use a <b>private</b> repo just for backups and a fine-grained token limited to that repo with Contents: read and write. Don't use your Pages repo.</div><form id=ghf><input name=username autocomplete=username value="${esc(DEFAULT_BACKUP_REPO)}" hidden><label>Repo<input id=ghr value="${esc(DEFAULT_BACKUP_REPO)}" autocapitalize=off></label><label>Token<input id=ght name=password type=password autocomplete=current-password></label><button class="b p" type=submit>Turn on</button></form>`) +
     `</div>`
   );
 }
-Object.assign(A, {
+Object.assign(actions, {
   ghSave: async () => {
     const repo = $('#ghr').value.trim(),
       token = $('#ght').value.trim();
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !token) return toast('Enter the repo as owner/name and a token');
     const g = { repo, token };
     try {
-      const empty = !S.ex.length && !S.sets.length,
-        rem = empty ? await ghPull(g) : null;
-      ls('gh', JSON.stringify(g));
+      const empty = !state.ex.length && !state.sets.length,
+        rem = empty ? await githubPull(g) : null;
+      lsSet('gh', JSON.stringify(g));
       if (rem) await applyBackup(rem);
-      else if (!empty) await ghPush(g);
+      else if (!empty) await githubPush(g);
       toast('Automatic backup is on');
       render();
     } catch (e) {
@@ -3571,28 +3601,28 @@ Object.assign(A, {
   },
   ghNow: async () => {
     try {
-      await ghPush(ghCfg());
+      await githubPush(githubConfig());
       toast('Backed up');
     } catch (e) {
-      ls('gherr', 'Last automatic backup failed: ' + e.message);
+      lsSet('gherr', 'Last automatic backup failed: ' + e.message);
       toast(e.message);
     }
     render();
   },
   ghRestore: async () => {
     try {
-      const d = await ghPull(ghCfg());
+      const d = await githubPull(githubConfig());
       d ? await applyBackup(d) : toast('No backup found in that repo');
     } catch (e) {
       toast(e.message);
     }
   },
   ghOff: () => {
-    ls('gh', '');
+    lsSet('gh', '');
     render();
   },
 });
-addEventListener('online', () => ghCfg() && autoBackup());
+addEventListener('online', () => githubConfig() && autoBackup());
 /* ---------- boot / PWA ---------- */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http'))
   navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' }).catch(() => {});
@@ -3605,13 +3635,13 @@ const hideSplash = () => {
   setTimeout(() => e.remove(), 500);
 };
 setTimeout(hideSplash, 5000);
-open()
+openDatabase()
   .then(async d => {
     db = d;
-    await load();
+    await loadState();
     render();
     setTimeout(hideSplash, Math.max(0, 1000 - performance.now()));
-    if (ghCfg() && lg('dirty') != '0') setTimeout(autoBackup, 3000);
+    if (githubConfig() && lsGet('dirty') != '0') setTimeout(autoBackup, 3000);
   })
   .catch(e => {
     hideSplash();

@@ -1,74 +1,76 @@
 /* ---------- rest timer ---------- */
-let AC,
-  alarmedFor = 0;
-const fmtT = x => Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0');
+let audioCtx,
+  alarmedAt = 0;
+const clockText = x => Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0');
 function restText() {
-  const rem = W.restEnd ? W.restEnd - Date.now() : 0;
-  return W.restEnd && rem <= 0 ? 'Go!' : fmtT(W.restEnd ? Math.ceil(rem / 1000) : W.rest);
+  const rem = workout.restEnd ? workout.restEnd - Date.now() : 0;
+  return workout.restEnd && rem <= 0
+    ? 'Go!'
+    : clockText(workout.restEnd ? Math.ceil(rem / 1000) : workout.rest);
 }
-function restCls() {
-  return 'rt' + (W.restEnd ? (W.restEnd - Date.now() > 0 ? ' run' : ' go') : '');
+function restClass() {
+  return 'rt' + (workout.restEnd ? (workout.restEnd - Date.now() > 0 ? ' run' : ' go') : '');
 }
-const rbw = () => {
-  const rem = W.restEnd ? W.restEnd - Date.now() : 0;
-  return rem > 0 ? Math.min(100, (rem / (W.rest * 1000)) * 100).toFixed(1) + '%' : '0%';
+const restBarWidth = () => {
+  const rem = workout.restEnd ? workout.restEnd - Date.now() : 0;
+  return rem > 0 ? Math.min(100, (rem / (workout.rest * 1000)) * 100).toFixed(1) + '%' : '0%';
 };
-const elapsed = () => {
-  const x = Math.floor((Date.now() - W.sess) / 1000);
-  return x >= 0 && x < 21600 ? fmtT(x) : '';
+const elapsedText = () => {
+  const x = Math.floor((Date.now() - workout.sess) / 1000);
+  return x >= 0 && x < 21600 ? clockText(x) : '';
 };
-const restBar = () =>
-  `<div class=rest><div class=rb><i id=rbi style="width:${rbw()}"></i></div><div class=rr><button class=s data-a=rdec>−15</button><button id=rt class="${restCls()}" data-a=redit>${restText()}</button><button class=s data-a=rinc>+15</button><button class=s data-a=rstop aria-label="Stop timer">✕</button></div></div>`;
+const restTimerBar = () =>
+  `<div class=rest><div class=rb><i id=rbi style="width:${restBarWidth()}"></i></div><div class=rr><button class=s data-a=rdec>−15</button><button id=rt class="${restClass()}" data-a=redit>${restText()}</button><button class=s data-a=rinc>+15</button><button class=s data-a=rstop aria-label="Stop timer">✕</button></div></div>`;
 function startRest() {
   try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-    AC.resume?.();
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume?.();
   } catch {}
-  W.restEnd = Date.now() + (W.rest || 120) * 1000;
-  saveW();
+  workout.restEnd = Date.now() + (workout.rest || 120) * 1000;
+  saveWorkout();
 }
 function alarm() {
   try {
     navigator.vibrate?.([250, 120, 250]);
   } catch {}
   try {
-    if (!AC) return;
-    const o = AC.createOscillator(),
-      g = AC.createGain();
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator(),
+      g = audioCtx.createGain();
     o.connect(g);
-    g.connect(AC.destination);
+    g.connect(audioCtx.destination);
     o.frequency.value = 880;
     g.gain.value = 0.25;
     o.start();
-    o.stop(AC.currentTime + 0.6);
+    o.stop(audioCtx.currentTime + 0.6);
   } catch {}
 }
 function setRest(n) {
   n = Math.min(1800, Math.max(15, n));
-  const d = n - W.rest;
-  W.rest = n;
-  if (W.restEnd && W.restEnd > Date.now()) W.restEnd += d * 1000;
-  ls('rest', n);
-  saveW();
+  const d = n - workout.rest;
+  workout.rest = n;
+  if (workout.restEnd && workout.restEnd > Date.now()) workout.restEnd += d * 1000;
+  lsSet('rest', n);
+  saveWorkout();
   tickRest();
 }
 function tickRest() {
-  if (!W) return;
-  if (W.restEnd) {
-    const rem = W.restEnd - Date.now();
-    if (rem <= 0 && rem > -4000 && alarmedFor !== W.restEnd) {
-      alarmedFor = W.restEnd;
+  if (!workout) return;
+  if (workout.restEnd) {
+    const rem = workout.restEnd - Date.now();
+    if (rem <= 0 && rem > -4000 && alarmedAt !== workout.restEnd) {
+      alarmedAt = workout.restEnd;
       alarm();
     }
   }
   const b = $('#rt');
   if (b) {
     b.textContent = restText();
-    b.className = restCls();
+    b.className = restClass();
   }
   const bi = $('#rbi');
-  if (bi) bi.style.width = rbw();
+  if (bi) bi.style.width = restBarWidth();
   const el = $('#el');
-  if (el) el.textContent = elapsed();
+  if (el) el.textContent = elapsedText();
 }
 setInterval(tickRest, 250);
