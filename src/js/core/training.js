@@ -122,6 +122,14 @@ function reference1RM(ex, testedPr, history) {
 
 const fatigueReps = setIndex => Math.floor(setIndex / 2);
 
+// n rows from makeRow(index). A plain loop on purpose: a set count that isn't a whole number (possible in an
+// imported plan) rounds up, e.g. 2.5 -> 3 rows. Array.from({ length: n }) would round down.
+function repeat(n, makeRow) {
+  const out = [];
+  for (let j = 0; j < n; j++) out.push(makeRow(j));
+  return out;
+}
+
 // Aim one rep above last time, within [what the average says, average + 2].
 const nextReps = (averageReps, lastTimeAtTarget) =>
   Math.min(averageReps + 2, Math.max(averageReps, Math.round(lastTimeAtTarget) + 1));
@@ -134,11 +142,7 @@ function suggestSets(ex, n, history) {
   const lastSession = sets.filter(s => s.sess == sessions[sessions.length - 1]);
   const hint = suggestionHint(ex, lastSession);
   const rows = (weight, reps) =>
-    Array.from({ length: n }, (_, j) => ({
-      w: weight,
-      r: Math.max(ex.lo, reps - fatigueReps(j)),
-      rir: ex.rir,
-    }));
+    repeat(n, j => ({ w: weight, r: Math.max(ex.lo, reps - fatigueReps(j)), rir: ex.rir }));
 
   const bodyweightOnly = !(ex.inc > 0);
   const lastTimeAtBodyweight = !ex.bwl && lastSession.length && Math.max(...lastSession.map(s => s.w)) === 0;
@@ -149,7 +153,7 @@ function suggestSets(ex, n, history) {
 
   const totals = sets.map(s => withBodyweight(ex, s));
   const strength = estimateStrength(totals, ex.lo, ex.hi);
-  if (!strength) return { rows: Array.from({ length: n }, () => ({ w: '', r: ex.lo, rir: ex.rir })), hint };
+  if (!strength) return { rows: repeat(n, () => ({ w: '', r: ex.lo, rir: ex.rir })), hint };
 
   // The heaviest working set in today's rep range, from the most recent session that has one.
   let lastInRange = null;
@@ -183,7 +187,8 @@ function suggestSets(ex, n, history) {
 }
 
 /* Bodyweight exercises (or ones you did at bodyweight last time) progress in reps only. "Capacity" is
-   reps + RIR, the reps you could have done; it's averaged over the last 4 sessions like strength. */
+   reps + RIR, the reps you could have done; it's averaged over the last 4 sessions like strength.
+   Unlike isWorkingSet, sets at 0 kg count here (that's the point). */
 function suggestReps(ex, sets, lastSession) {
   const capacity = new Map();
   for (const s of sets)
@@ -240,7 +245,8 @@ const WARMUP_RAMP = {
                Each following set assumes you're about 1.5% weaker, for fatigue.
    Rows: { w, r, rir, pw: planned weight (total load), auto: true until you edit it, done, wu, adj: adjusted }. */
 
-// A logged set (in total load) that can tell us today's strength.
+// A logged set (in total load) that can tell us today's strength. Deliberately not the same test as
+// isWorkingSet (that one is for history): here the RIR must be 0–5 and the exercise must use weights.
 const canAdjustFrom = (logged, ex) =>
   !(+logged.rir > 5 || logged.wu || !(+logged.w > 0) || !hasRir(logged) || !(+logged.r > 0) || !(ex.inc > 0));
 

@@ -99,6 +99,11 @@ test('double progression: same weight, one more rep, and fewer reps on later set
   assert.equal(g.hint, 'Last: 100×8 @2 · 8–12 reps @ 2 RIR');
 });
 
+test('a set count that isn’t a whole number rounds up (possible in imported plans)', () => {
+  assert.equal(T.suggestSets(bench, 2.5, history([[[100, 8, 2]]])).rows.length, 3);
+  assert.equal(T.suggestSets(bench, 2.5, []).rows.length, 3);
+});
+
 test('double progression: past the top of the range, heavier and back to the bottom', () => {
   // Last time 100x12 @ 2: next would be 13 > 12. Strength = 100 x (1 + 14/30) = 146.67.
   // At 8 reps @ 2 RIR you can lift 146.67 x 0.75 = 110 -> 110 kg x 8.

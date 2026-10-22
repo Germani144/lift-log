@@ -119,7 +119,8 @@ function planProgress(t) {
 
 // The 1RM % sets are based on, for an exercise (see reference1RM in training.js).
 async function loadReference1RM(ex) {
-  return reference1RM(ex, state.pr[ex.id], await getAll('sets', 'ex', ex.id));
+  const tested = state.pr[ex.id];
+  return reference1RM(ex, tested, tested ? [] : await getAll('sets', 'ex', ex.id)); // history only needed without a test
 }
 
 /* Add an exercise to the workout in progress, with its sets filled in.
@@ -129,6 +130,7 @@ async function loadReference1RM(ex) {
 async function addExerciseToWorkout(slot, week = 1) {
   const ex = exerciseById(slot.exId);
   if (!ex) return;
+  const history = await getAll('sets', 'ex', ex.id); // this exercise's logged sets
   const orDefault = (value, fallback) => (value === '' || value == null ? fallback : value),
     mode = slot.mode || (ex.mode == 'pct' ? 'pct' : 'rir'),
     lo = orDefault(slot.lo, ex.lo) || 5,
@@ -139,24 +141,20 @@ async function addExerciseToWorkout(slot, week = 1) {
         : (orDefault(slot.rir, ex.rir) ?? 2),
     plannedPct = mode == 'pct' && slot.lines?.length,
     item = { exId: ex.id, mode, lo, hi, rirT: targetRir, rows: [], hint: '', bwo: bodyweightFor(ex) },
-    suggestion = suggestSets(
-      { ...ex, lo, hi, rir: targetRir },
-      plannedPct ? 0 : slot.n || 3,
-      await getAll('sets', 'ex', ex.id),
-    );
+    suggestion = suggestSets({ ...ex, lo, hi, rir: targetRir }, plannedPct ? 0 : slot.n || 3, history);
   item.hint = suggestion.hint;
   if (mode == 'pct') {
-    const ref = await loadReference1RM(ex);
+    const ref = reference1RM(ex, state.pr[ex.id], history);
     item.ref = ref?.w;
     item.refEst = ref?.est;
   }
 
   if (plannedPct) {
-    const history = sortedHistory(await getAll('sets', 'ex', ex.id)).map(s => withBodyweight(ex, s));
+    const totals = sortedHistory(history).map(s => withBodyweight(ex, s));
     let nudge = 0;
     for (const line of slot.lines) {
       const reps = Math.max(1, Math.round(+line.r || 1)),
-        trend = strengthTrend(history, reps),
+        trend = strengthTrend(totals, reps),
         planned = item.ref ? ((+line.p || 0) / 100) * item.ref : 0;
       if (trend !== 1) nudge = trend;
       for (let k = 0; k < Math.max(1, Math.round(+line.n || 1)); k++)

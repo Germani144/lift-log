@@ -321,9 +321,11 @@ const actions = {
     r.id = await dbPut('sets', rec);
     r.done = true;
     delete r.adj;
-    if (it.mode == 'pct')
-      await adjustRemainingSetsPct(it, +s.dataset.j, ex, await getAll('sets', 'ex', ex.id), workout.sess);
-    else adjustRemainingSetsRir(it, +s.dataset.j, ex);
+    if (it.mode == 'pct') {
+      // Read the history only when this set can tell us anything (not a warm-up, 5+ or without weight).
+      if (canAdjustFrom(withBodyweight(ex, r), ex))
+        await adjustRemainingSetsPct(it, +s.dataset.j, ex, await getAll('sets', 'ex', ex.id), workout.sess);
+    } else adjustRemainingSetsRir(it, +s.dataset.j, ex);
     saveWorkout();
     startRest();
     const x = setInfo(r, ex, state.pr[ex.id]),
