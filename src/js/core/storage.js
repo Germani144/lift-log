@@ -1,50 +1,55 @@
-/* All of Germani144's apps share this origin's localStorage, so every Lift Log key starts with "lift-log:".
+/* Where data lives.
+ *   localStorage: small settings and the workout in progress, every key prefixed "lift-log:".
+ *   IndexedDB (database "liftlog"): exercises, plans ("templates"), tested 1RMs ("pr_history") and logged sets. */
+
+/* ---------- localStorage ----------
+   Other apps may share this origin's localStorage, so every Lift Log key starts with "lift-log:".
    Old unprefixed keys are moved once. Keys whose content proves they're Lift Log's (workout in progress, backup
-   settings) are removed afterwards; generic ones (rest, bw, lb, dirty) are copied only if they look valid, and
+   settings) are removed afterwards; generic ones (rest, bw, ht, lb, dirty) are copied only if they look valid, and
    left in place because another app might own a key with the same name. */
 const LS_PREFIX = 'lift-log:';
 (() => {
   try {
     const L = localStorage,
-      J = v => {
+      parse = v => {
         try {
           return JSON.parse(v);
         } catch {
           return null;
         }
       },
-      num = (a, b) => v => +v >= a && +v <= b;
-    const sure = {
+      between = (lo, hi) => v => +v >= lo && +v <= hi;
+    const surelyOurs = {
         w: v => {
-          const o = J(v);
+          const o = parse(v);
           return !!(o && Array.isArray(o.items) && o.sess > 0);
         },
         gh: v => {
-          const o = J(v);
+          const o = parse(v);
           return !!(o && o.token && /lift-log/i.test(o.repo || ''));
         },
         gherr: v => /^Last automatic backup failed/.test(v),
       },
-      looks = {
-        rest: num(15, 1800),
-        bw: num(20, 400),
-        ht: num(100, 250),
-        lb: num(1.5e12, 4e12),
+      looksValid = {
+        rest: between(15, 1800),
+        bw: between(20, 400),
+        ht: between(100, 250),
+        lb: between(1.5e12, 4e12),
         dirty: v => v == '0' || v == '1',
       };
-    for (const k of [...Object.keys(sure), ...Object.keys(looks)]) {
+    for (const k of [...Object.keys(surelyOurs), ...Object.keys(looksValid)]) {
       const v = L.getItem(k);
       if (v == null || L.getItem(LS_PREFIX + k) != null) continue;
-      if (sure[k]) {
-        if (sure[k](v)) {
+      if (surelyOurs[k]) {
+        if (surelyOurs[k](v)) {
           L.setItem(LS_PREFIX + k, v);
           L.removeItem(k);
         }
-      } else if (looks[k](v)) L.setItem(LS_PREFIX + k, v);
+      } else if (looksValid[k](v)) L.setItem(LS_PREFIX + k, v);
     }
   } catch {}
 })();
-let backupTimer;
+
 const lsSet = (k, v) => {
   try {
     localStorage.setItem(LS_PREFIX + k, v);
@@ -57,31 +62,39 @@ const lsGet = k => {
     return null;
   }
 };
+
+// Settings: your bodyweight (kg) and height (cm); 0 when not set.
+const bodyweight = () => +lsGet('bw') || 0,
+  height = () => +lsGet('ht') || 0;
+
 /* ---------- IndexedDB ---------- */
 let db;
 const openDatabase = () =>
-  new Promise((res, rej) => {
+  new Promise((resolve, reject) => {
     const r = indexedDB.open('liftlog', 1);
     r.onupgradeneeded = () => {
       const d = r.result,
-        o = { keyPath: 'id', autoIncrement: true };
-      d.createObjectStore('exercises', o);
-      d.createObjectStore('templates', o);
-      d.createObjectStore('pr_history', o).createIndex('ex', 'exId');
-      d.createObjectStore('sets', o).createIndex('ex', 'exId');
+        keys = { keyPath: 'id', autoIncrement: true };
+      d.createObjectStore('exercises', keys);
+      d.createObjectStore('templates', keys);
+      d.createObjectStore('pr_history', keys).createIndex('ex', 'exId');
+      d.createObjectStore('sets', keys).createIndex('ex', 'exId');
     };
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
   });
 const request = r =>
-  new Promise((res, rej) => {
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
+  new Promise((resolve, reject) => {
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
   });
-const store = (n, m = 'readonly') => db.transaction(n, m).objectStore(n);
-const getAll = (n, ix, k) =>
-  request(ix ? store(n).index(ix).getAll(k) : store(n).getAll()).then(a =>
-    n == 'sets' ? a.map(s => (s.rir > 10 ? { ...s, rir: null } : s)) : a,
-  ); // RIR above 10 is treated as 'not tracked'
-const dbPut = (n, o) => (markDataChanged(), request(store(n, 'readwrite').put(o)));
-const dbDelete = (n, id) => (markDataChanged(), request(store(n, 'readwrite').delete(id)));
+const store = (name, mode = 'readonly') => db.transaction(name, mode).objectStore(name);
+// Everything in a store, or (with an index) everything matching a key, e.g. getAll('sets', 'ex', exerciseId).
+// A set's RIR above 10 is treated as "not tracked".
+const getAll = (name, index, key) =>
+  request(index ? store(name).index(index).getAll(key) : store(name).getAll()).then(a =>
+    name == 'sets' ? a.map(s => (s.rir > 10 ? { ...s, rir: null } : s)) : a,
+  );
+// Every change marks the data as changed, which schedules an automatic backup (backup.js).
+const dbPut = (name, o) => (markDataChanged(), request(store(name, 'readwrite').put(o)));
+const dbDelete = (name, id) => (markDataChanged(), request(store(name, 'readwrite').delete(id)));

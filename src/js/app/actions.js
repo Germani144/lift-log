@@ -1,3 +1,7 @@
+/* What every button does. A button says which action it runs with data-a="name" and passes values with other
+   data- attributes; the click handler (events.js) calls actions[name](setRow, button.dataset), where setRow
+   is the workout set row the button is in, if any. */
+
 const closePage = () => {
   state.view = null;
   draft = null;
@@ -317,11 +321,12 @@ const actions = {
     r.id = await dbPut('sets', rec);
     r.done = true;
     delete r.adj;
-    if (it.mode == 'pct') await adjustRemainingSetsPct(it, +s.dataset.j, ex);
+    if (it.mode == 'pct')
+      await adjustRemainingSetsPct(it, +s.dataset.j, ex, await getAll('sets', 'ex', ex.id), workout.sess);
     else adjustRemainingSetsRir(it, +s.dataset.j, ex);
     saveWorkout();
     startRest();
-    const x = setInfo(r, ex),
+    const x = setInfo(r, ex, state.pr[ex.id]),
       pr = state.pr[ex.id];
     if (test) {
       const pb = ex.pb || 0,
@@ -344,7 +349,7 @@ const actions = {
       ex = exerciseById(it.exId);
     if (it.mode == d.m) return;
     if (d.m == 'pct' && !(it.ref > 0)) {
-      const ref = await reference1RM(ex);
+      const ref = await loadReference1RM(ex);
       if (!ref)
         return toast(
           `No 1RM for ${ex.name} yet. Add a tested 1RM in Exercises, or log a few RIR sets first.`,

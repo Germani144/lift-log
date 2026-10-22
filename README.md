@@ -28,6 +28,26 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 - **Navigation:** swipe left/right between tabs; the phone's back gesture closes the open page. The bottom bar is fixed and only the page above it scrolls; each tab opens at the top, and going back from an exercise returns you to the same place in the list.
 - **Backup:** automatic backup to a private GitHub repo (fine-grained token, Contents read/write on that repo only), plus manual export/import of a JSON file.
 
+## How it works
+
+**The problem.** Most workout loggers record what you did and show it back. Lift Log also tells you what to do next, and keeps adjusting during the workout: if a set was harder or easier than planned, the sets after it change. It does this from two numbers you already know when you finish a set: the reps, and how many more you could have done (reps in reserve, RIR).
+
+**One strength number.** Every set with a known RIR gives an estimated one-rep max (e1RM), using Epley's formula with the reps you had left counted as reps you could have done: `e1RM = weight × (1 + (reps + RIR) / 30)`. Your *strength* for an exercise is the best e1RM of each of your last 4 sessions, averaged with recent sessions counting more. Warm-ups, sets at 5+ RIR and sets without RIR are left out, and sets close to today's rep range are preferred, so a heavy-triples day doesn't inflate a light day's suggestion.
+
+**What to lift next (RIR plans).** Double progression: same weight, one more rep each session, until you pass the top of the rep range; then heavier and back to the bottom. The previous set says where you are (`reps + RIR − target RIR` = reps you could do at today's target), and the strength number keeps that honest (at most 2 reps above what it predicts). Later sets aim one rep lower every two sets, for fatigue. Bodyweight exercises progress in reps only.
+
+**% of 1RM plans.** The plan says e.g. 3 × 2 @ 80%. The base is your tested 1RM, or your strength estimate if you haven't tested one, nudged (max ±10%) by your trend at that rep count: the last 3 sessions against the last 10.
+
+**Adjusting during the workout.** After each logged set, the remaining sets you haven't touched are recalculated from that set's e1RM, never more than ±10% from the plan. In RIR view the weight stays and the reps move to hit the target RIR (assuming about 1.5% fatigue per set); in % view the weights scale by today's strength compared with your usual at that rep count. Sets you edit yourself are never changed.
+
+**Design choices.**
+- *Offline-first, no account.* Gyms have bad signal and training data is personal, so everything lives on the phone (IndexedDB); backup is opt-in, to a private GitHub repo you own.
+- *A web app, not a store app.* Installable from the browser, updates on the next open, no app store. One self-contained HTML file with a strict hash-based Content-Security-Policy, so the page can only run its own code and talk to its own site and the GitHub API.
+- *No framework or bundler.* The app is small enough that plain JavaScript and HTML strings keep it simple and fast to load; Python is the only build tool. The training maths is kept separate from the screens as plain functions, so it can be tested on its own (`tests/unit.test.mjs`).
+- *One history, two views.* Every set is stored as kg, reps and RIR, so RIR and % of 1RM are just two ways of looking at the same data, and switching never loses anything.
+
+The details, with the reasoning behind each formula, are in comments in `src/js/core/training.js`.
+
 ## Making changes
 
 1. Edit the source in `src/` (see **Code layout** below). Don't edit `index.html` directly: it's generated.
@@ -40,8 +60,9 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 3. Run the tests:
    ```
    pip install playwright && python3 -m playwright install chromium   # once
-   python3 tests/run.py            # everything, ~45 s
+   python3 tests/run.py            # browser tests: everything, ~1 min
    python3 tests/run.py suggest    # just the tests with "suggest" in the name
+   node --test tests/unit.test.mjs # unit tests for the training maths (Node 18+), ~1 s
    ```
 4. Commit and push. GitHub runs the same checks on every push (Actions → Tests), and emails you if one fails.
 5. Check it's live: open https://germani144-lift.github.io/lift-log/sw.js and look for the new `const VER`. If GitHub Pages didn't publish it, push again to re-trigger the build.
@@ -53,10 +74,12 @@ src/index.html        page shell (head, splash screen); the build inlines the CS
 src/styles.css        all styles
 src/js/
   version.js          app version (written by the build)
-  core/dom.js         small DOM and formatting helpers
+  core/format.js      numbers and dates as text
+  core/dom.js         small DOM helpers
   core/storage.js     localStorage (every key prefixed "lift-log:") and IndexedDB
   core/training.js    the training maths: e1RM, strength estimate, suggestions, next-set adjustment
-  core/state.js       app state, loading data, plans, building a workout
+                      (plain functions of their inputs: no screen, no database)
+  core/state.js       the data model, app state, loading data, plans, building a workout
   core/rest-timer.js  rest timer between sets
   views/*.js          one file per screen (train, exercises, history, plans, settings) plus shared bits
   app/navigation.js   render() and the phone back gesture
@@ -65,7 +88,8 @@ src/js/
   backup.js           export/import and automatic GitHub backup
   boot.js             start-up
 tools/build.py        assembles index.html and runs the security checks
-tests/run.py          browser tests
+tests/run.py          browser tests (the whole app in headless Chromium)
+tests/unit.test.mjs   unit tests for core/training.js
 sw.js                 service worker (offline cache)
 ```
 
@@ -84,6 +108,7 @@ Lift Log has its own address (`germani144-lift.github.io`, a free GitHub organiz
 ## What the checks cover
 
 - **Security** (`tools/build.py --check`): the service worker only touches its own caches and scope, localStorage keys are prefixed, strict Content-Security-Policy (no inline handlers, no `eval`, scripts only by hash, network only to this site (update check) and the GitHub API for backups), and every file needed offline is precached.
+- **Training maths** (`tests/unit.test.mjs`): worked examples for the 1RM formula, rounding, the strength estimate and trend, every branch of the suggestions (no history, progression, top and bottom of the range, bodyweight), bodyweight-loaded lifts, and the after-set adjustments in both views.
 - **Behaviour** (`tests/run.py`): main workout flow, weight/rep suggestions (progression, warm-ups, bad-day guard, bodyweight), warm-up sets, backup round trip and rejection of bad files, names can't inject HTML/script, offline use and other apps' caches surviving, storage keys prefixed and migrated, back gesture, search and ordering, swipe between tabs.
 
 Fonts: Barlow and Barlow Condensed, SIL Open Font License (`fonts/OFL.txt`).

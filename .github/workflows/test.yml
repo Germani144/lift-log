@@ -16,6 +16,11 @@ jobs:
           python-version: "3.12"
       - name: Build + security checks
         run: python3 tools/build.py --check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Unit tests (training maths)
+        run: node --test tests/unit.test.mjs
       - name: Install headless Chromium
         run: |
           pip install playwright==1.48.0

@@ -33,7 +33,8 @@ VERSION_FILE = SRC / "js" / "version.js"
 # Load order matters: each file may use what the files above it define at load time.
 JS_FILES = [
     "version.js",              # the app version (written by this build)
-    "core/dom.js",             # tiny DOM and formatting helpers
+    "core/format.js",          # numbers and dates as text (pure)
+    "core/dom.js",             # tiny DOM helpers
     "core/storage.js",         # localStorage (prefixed) and IndexedDB
     "core/training.js",        # the training maths: e1RM, strength, suggestions, next-set adjustment
     "core/state.js",           # app state, loading data, plans, building a workout

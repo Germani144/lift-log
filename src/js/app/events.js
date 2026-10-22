@@ -1,4 +1,6 @@
-/* ---------- events ---------- */
+/* Event handling. Listeners sit on the app container, not on each element, because screens are redrawn as
+   HTML. Typing updates the data directly (and redraws only what depends on it); swiping left/right changes tab. */
+
 const setPath = (o, p, v) => {
   const k = p.split('.'),
     l = k.pop();

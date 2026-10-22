@@ -2,7 +2,8 @@
 
 - This repo is Lift Log only. Don't attach or edit other repos (cart-log, nap-log) from a Lift Log chat.
 - The app's source is in `src/` (README → Code layout). Never edit `index.html` by hand: `tools/build.py` generates it from `src/`.
-- After any edit to app files: `python3 tools/build.py`, then `python3 tests/run.py`. Don't push if either fails.
+- After any edit to app files: `python3 tools/build.py`, then `python3 tests/run.py` and `node --test tests/unit.test.mjs`. Don't push if any fails.
+- Keep `src/js/core/training.js` free of DOM, storage and state: plain functions of their inputs (the only outside value is `bodyweight()`). Callers fetch history and pass it in. Changes to the training maths get a worked example in `tests/unit.test.mjs`.
 - Format edited source with `npx prettier --write "src/**/*.{js,css}"` (config in `.prettierrc.json`).
 - Keep the README up to date: whenever a change adds, removes or changes a feature, a setting, the build/test steps or the backup setup, update README.md in the same commit.
 - Add or adjust a test in `tests/run.py` for new behaviour.

@@ -1,3 +1,6 @@
+/* Bits of UI shared by several screens. Views are functions that return HTML strings; render() puts them on
+   the page. Every user-typed value goes through esc() first. */
+
 const barbellProgress = (n, done, cur, label) =>
   `<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({ length: n }, (_, i) => `<i${i < done ? ' class=d' : cur && i == done ? ' class=n' : ''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NAV_ICONS = {
@@ -15,11 +18,6 @@ function rirSelect(attrs, v, { pct = false, max5 = false, blank = true } = {}) {
   }
   return `<select ${attrs} class="pick${cur === '' ? ' ph' : ''}">${blank ? `<option value=""${cur === '' ? ' selected' : ''}>${pct ? 'RPE' : 'RIR'}</option>` : ''}${(pct ? vals.slice().reverse() : vals).map(x => `<option value="${x}"${x === cur ? ' selected' : ''}>${pct ? rpeLabel(x) : rirLabel(x)}</option>`).join('')}</select>`;
 }
-/* ---------- views ---------- */
-const opts = id =>
-  state.ex
-    .map(x => `<option value="${x.id}" ${x.id == id ? 'selected' : ''}>${esc(x.name)}</option>`)
-    .join('');
 
 const COG_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';

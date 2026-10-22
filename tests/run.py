@@ -87,7 +87,7 @@ class App:
           await loadState();render()}""", [ex_name, sessions])
 
     def suggest(self, ex_name, n=3, **over):
-        return self.js("async([n,k,o])=>{const ex={...state.ex.find(e=>e.name==n),...o};const g=await suggestSets(ex,k);return g.rows.map(r=>[r.w,r.r])}",
+        return self.js("async([n,k,o])=>{const ex={...state.ex.find(e=>e.name==n),...o};const g=suggestSets(ex,k,await getAll('sets','ex',ex.id));return g.rows.map(r=>[r.w,r.r])}",
                        [ex_name, n, over])
 
     def close(self):

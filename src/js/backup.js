@@ -1,3 +1,6 @@
+/* Backups. Manual: export everything to a JSON file and import it back (validated field by field).
+   Automatic: a few seconds after each change, the same file is saved to a private GitHub repo. */
+
 function lastBackupTime() {
   try {
     return +localStorage.getItem(LS_PREFIX + 'lb') || 0;
@@ -165,6 +168,7 @@ const githubHeaders = (g, a = 'application/vnd.github+json') => ({
   Authorization: 'Bearer ' + g.token,
   Accept: a,
 });
+let backupTimer;
 function markDataChanged() {
   lsSet('dirty', '1');
   clearTimeout(backupTimer);

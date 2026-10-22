@@ -1,4 +1,4 @@
-/* ---------- boot / PWA ---------- */
+/* Start-up: register the service worker (offline use), open the database, draw the first screen. */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http'))
   navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' }).catch(() => {});
 navigator.storage?.persist?.();

@@ -1,3 +1,5 @@
+/* Plans tab: your weekly plans, and the plan editor (days, exercises, RIR or % slots, weekly RIR targets). */
+
 function renderPlans() {
   return (
     pageTitle('Plans') +

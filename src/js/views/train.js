@@ -1,3 +1,6 @@
+/* Train tab: plans to start (or the workout in progress), and the workout screen itself: one card per
+   exercise with a row per set, the progress bar and the rest timer. */
+
 function updateSetInfo(s) {
   const it = workout.items[s.dataset.i];
   $('.inf>span', s).innerHTML = setInfoHtml(it, it.rows[s.dataset.j], exerciseById(it.exId));
@@ -39,7 +42,7 @@ function exerciseCard(it, i) {
 }
 function setInfoHtml(it, r, ex) {
   const P = it.mode == 'pct',
-    x = setInfo(r, ex),
+    x = setInfo(r, ex, state.pr[ex.id]),
     kg = P
       ? it.bwo
         ? +r.w > 0

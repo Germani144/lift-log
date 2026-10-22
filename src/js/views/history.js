@@ -1,3 +1,5 @@
+/* History tab: month calendar, every workout, and editing a past workout. */
+
 const dayKey = t => {
   const d = new Date(t);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

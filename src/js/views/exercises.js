@@ -1,3 +1,5 @@
+/* Exercises tab: the list with its search box, and an exercise's page (settings, tested 1RMs, history charts). */
+
 let exerciseFilter = ''; // Exercises tab search text
 const matchesFilter = n => {
   n = n.toLowerCase();

@@ -1,3 +1,7 @@
+/* Type-to-find exercises, used when adding or replacing an exercise in a workout, a plan or a past workout.
+   Empty search: your most-used exercises as chips. While typing: matches ranked by where the text matches,
+   with "New exercise" at the end when nothing matches exactly. */
+
 const exercisesByName = () =>
   state.ex.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 /* ---------- type-to-find exercises (like Home log): most-used chips when empty, ranked matches while typing ---------- */

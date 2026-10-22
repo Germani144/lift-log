@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-2ovEd7svO1aLMPqd73VixsOVOPzh2HV1/qWo8l68p4s='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-HZ+y2d2IgfhClKvqH4sfYFU8nmXjbf71CrES2kMnkG8='; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -1087,78 +1087,102 @@ nav button.nx {
 </style></head>
 <body><div id="splash" aria-hidden="true"><img src="icon-192.png" width="132" height="132" alt=""><b>Lift Log</b><span id="sver"></span><div class="bb"><i class="pl pb"></i><i class="pl pr"></i><i class="sl"></i><div class="shaft"><i></i><i></i><i></i><i></i><i></i></div><i class="sl"></i><i class="pl pr"></i><i class="pl pb"></i></div></div><div id="app"></div><div id="toast" hidden></div>
 <script>
-const VER='2.12'; // app version, bumped automatically by tools/build.py on every change
-const $ = (s, e = document) => e.querySelector(s),
+const VER='2.13'; // app version, bumped automatically by tools/build.py on every change
+/* Turning numbers and dates into text. Pure functions, no DOM. */
+
+// A number for display: at most 2 decimals, no trailing zeros; '' for empty or invalid input.
+const fmt = x => (x === '' || x == null || isNaN(x) ? '' : +(+x).toFixed(2));
+
+const ageText = t => {
+  const days = Math.floor((Date.now() - t) / 864e5);
+  return days < 1 ? 'today' : days < 60 ? days + 'd ago' : Math.round(days / 30.4) + 'mo ago';
+};
+
+const dateText = t =>
+  new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+// 0 kg on the bar means a bodyweight set.
+const weightLabel = w => (w > 0 ? fmt(w) : 'BW');
+
+// RIR is stored as a number; 6 means "5+" (more than 5 reps left). RPE = 10 − RIR.
+const rirLabel = v => (v == null || v === '' ? '' : +v > 5 ? '5+' : fmt(v));
+const rpeLabel = v => (v == null || v === '' ? '' : +v > 5 ? '<5' : fmt(10 - v));
+/* Small DOM helpers. */
+
+const $ = (selector, root = document) => root.querySelector(selector),
   app = $('#app');
+
+// Escape text before putting it into HTML (every name you type goes through this).
 const esc = s =>
   String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// The page scrolls inside <main>, not the window.
 const scrollMainTo = (x, y) => {
     const m = $('main');
     if (m) m.scrollTop = y;
   },
-  mainScrollY = () => $('main')?.scrollTop || 0; // the page scrolls inside <main>, not the window
-const fmt = x => (x === '' || x == null || isNaN(x) ? '' : +(+x).toFixed(2));
-const ageText = t => {
-  const d = Math.floor((Date.now() - t) / 864e5);
-  return d < 1 ? 'today' : d < 60 ? d + 'd ago' : Math.round(d / 30.4) + 'mo ago';
-};
-const dateText = t =>
-  new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  mainScrollY = () => $('main')?.scrollTop || 0;
+
 let toastTimer;
-const toast = m => {
+const toast = message => {
   const t = $('#toast');
-  t.textContent = m;
+  t.textContent = message;
   t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (t.hidden = true), 4000);
 };
-/* All of Germani144's apps share this origin's localStorage, so every Lift Log key starts with "lift-log:".
+/* Where data lives.
+ *   localStorage: small settings and the workout in progress, every key prefixed "lift-log:".
+ *   IndexedDB (database "liftlog"): exercises, plans ("templates"), tested 1RMs ("pr_history") and logged sets. */
+
+/* ---------- localStorage ----------
+   Other apps may share this origin's localStorage, so every Lift Log key starts with "lift-log:".
    Old unprefixed keys are moved once. Keys whose content proves they're Lift Log's (workout in progress, backup
-   settings) are removed afterwards; generic ones (rest, bw, lb, dirty) are copied only if they look valid, and
+   settings) are removed afterwards; generic ones (rest, bw, ht, lb, dirty) are copied only if they look valid, and
    left in place because another app might own a key with the same name. */
 const LS_PREFIX = 'lift-log:';
 (() => {
   try {
     const L = localStorage,
-      J = v => {
+      parse = v => {
         try {
           return JSON.parse(v);
         } catch {
           return null;
         }
       },
-      num = (a, b) => v => +v >= a && +v <= b;
-    const sure = {
+      between = (lo, hi) => v => +v >= lo && +v <= hi;
+    const surelyOurs = {
         w: v => {
-          const o = J(v);
+          const o = parse(v);
           return !!(o && Array.isArray(o.items) && o.sess > 0);
         },
         gh: v => {
-          const o = J(v);
+          const o = parse(v);
           return !!(o && o.token && /lift-log/i.test(o.repo || ''));
         },
         gherr: v => /^Last automatic backup failed/.test(v),
       },
-      looks = {
-        rest: num(15, 1800),
-        bw: num(20, 400),
-        ht: num(100, 250),
-        lb: num(1.5e12, 4e12),
+      looksValid = {
+        rest: between(15, 1800),
+        bw: between(20, 400),
+        ht: between(100, 250),
+        lb: between(1.5e12, 4e12),
         dirty: v => v == '0' || v == '1',
       };
-    for (const k of [...Object.keys(sure), ...Object.keys(looks)]) {
+    for (const k of [...Object.keys(surelyOurs), ...Object.keys(looksValid)]) {
       const v = L.getItem(k);
       if (v == null || L.getItem(LS_PREFIX + k) != null) continue;
-      if (sure[k]) {
-        if (sure[k](v)) {
+      if (surelyOurs[k]) {
+        if (surelyOurs[k](v)) {
           L.setItem(LS_PREFIX + k, v);
           L.removeItem(k);
         }
-      } else if (looks[k](v)) L.setItem(LS_PREFIX + k, v);
+      } else if (looksValid[k](v)) L.setItem(LS_PREFIX + k, v);
     }
   } catch {}
 })();
-let backupTimer;
+
 const lsSet = (k, v) => {
   try {
     localStorage.setItem(LS_PREFIX + k, v);
@@ -1171,119 +1195,256 @@ const lsGet = k => {
     return null;
   }
 };
+
+// Settings: your bodyweight (kg) and height (cm); 0 when not set.
+const bodyweight = () => +lsGet('bw') || 0,
+  height = () => +lsGet('ht') || 0;
+
 /* ---------- IndexedDB ---------- */
 let db;
 const openDatabase = () =>
-  new Promise((res, rej) => {
+  new Promise((resolve, reject) => {
     const r = indexedDB.open('liftlog', 1);
     r.onupgradeneeded = () => {
       const d = r.result,
-        o = { keyPath: 'id', autoIncrement: true };
-      d.createObjectStore('exercises', o);
-      d.createObjectStore('templates', o);
-      d.createObjectStore('pr_history', o).createIndex('ex', 'exId');
-      d.createObjectStore('sets', o).createIndex('ex', 'exId');
+        keys = { keyPath: 'id', autoIncrement: true };
+      d.createObjectStore('exercises', keys);
+      d.createObjectStore('templates', keys);
+      d.createObjectStore('pr_history', keys).createIndex('ex', 'exId');
+      d.createObjectStore('sets', keys).createIndex('ex', 'exId');
     };
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
   });
 const request = r =>
-  new Promise((res, rej) => {
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
+  new Promise((resolve, reject) => {
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
   });
-const store = (n, m = 'readonly') => db.transaction(n, m).objectStore(n);
-const getAll = (n, ix, k) =>
-  request(ix ? store(n).index(ix).getAll(k) : store(n).getAll()).then(a =>
-    n == 'sets' ? a.map(s => (s.rir > 10 ? { ...s, rir: null } : s)) : a,
-  ); // RIR above 10 is treated as 'not tracked'
-const dbPut = (n, o) => (markDataChanged(), request(store(n, 'readwrite').put(o)));
-const dbDelete = (n, id) => (markDataChanged(), request(store(n, 'readwrite').delete(id)));
-/* ---------- math ---------- */
-const fractionOf1RM = (r, rir) => 1 / (1 + (r + rir) / 30); // %1RM from reps + RIR
-const estimate1RM = (w, r, rir) => w / fractionOf1RM(r, rir);
-const hasRir = r => r.rir !== '' && r.rir != null && +r.rir >= 0 && +r.rir <= 10;
-const isMaxTest = r => +r.r === 1 && hasRir(r) && +r.rir === 0; // 1 rep at 0 RIR counts as a 1RM
-const roundToStep = (x, i) => (i > 0 ? +(Math.round(x / i) * i).toFixed(3) : +(+x).toFixed(2)); // increment 0 = no rounding (bodyweight)
-const weightLabel = w => (w > 0 ? fmt(w) : 'BW');
+const store = (name, mode = 'readonly') => db.transaction(name, mode).objectStore(name);
+// Everything in a store, or (with an index) everything matching a key, e.g. getAll('sets', 'ex', exerciseId).
+// A set's RIR above 10 is treated as "not tracked".
+const getAll = (name, index, key) =>
+  request(index ? store(name).index(index).getAll(key) : store(name).getAll()).then(a =>
+    name == 'sets' ? a.map(s => (s.rir > 10 ? { ...s, rir: null } : s)) : a,
+  );
+// Every change marks the data as changed, which schedules an automatic backup (backup.js).
+const dbPut = (name, o) => (markDataChanged(), request(store(name, 'readwrite').put(o)));
+const dbDelete = (name, id) => (markDataChanged(), request(store(name, 'readwrite').delete(id)));
+/* The training maths: how strong you are, what to lift next, and how to adjust after each set.
+ *
+ * Everything here is a plain function of its inputs: no screen, no database. The one outside value is
+ * your current bodyweight (bodyweight(), from Settings), needed for lifts where the load includes it.
+ * tests/unit.test.mjs runs these functions on their own.
+ *
+ * Terms
+ *   set     a logged set: { w: kg added to the bar, r: reps, rir: reps in reserve (null = not tracked),
+ *           sess: workout id, t: time, wu: true for a warm-up, bw: your bodyweight that day }
+ *   RIR     reps in reserve: how many more reps you could have done. RPE = 10 − RIR. 6 is stored for "5+".
+ *   e1RM    estimated one-rep max, worked out from a set's weight, reps and RIR
+ *   step    the exercise's weight increment (ex.inc); 0 means a bodyweight-only exercise
+ */
 
-/* Bodyweight lifts (pull-ups, dips…): with "Load includes bodyweight" on, the maths uses you + the plate,
-   while you always type and see only the added kg. Each logged set remembers your bodyweight at the time. */
-const bodyweight = () => +lsGet('bw') || 0,
-  height = () => +lsGet('ht') || 0,
-  bodyweightFor = ex => (ex?.bwl ? bodyweight() : 0);
+/* ---------- 1RM maths ---------- */
+
+// The fraction of your 1RM you can lift for `reps` with `rir` reps still in the tank. This is Epley's
+// formula, counting the reps you had left as reps you could have done: 1 / (1 + (reps + RIR) / 30).
+const fractionOf1RM = (reps, rir) => 1 / (1 + (reps + rir) / 30);
+const estimate1RM = (weight, reps, rir) => weight / fractionOf1RM(reps, rir);
+// The same formula solved for reps: how many reps a lifter with this 1RM can do at `weight`, leaving `rir`.
+const repsAt = (oneRM, weight, rir) => 30 * (oneRM / weight - 1) - rir;
+
+const hasRir = set => set.rir !== '' && set.rir != null && +set.rir >= 0 && +set.rir <= 10;
+// One rep with nothing left counts as a tested 1RM.
+const isMaxTest = set => +set.r === 1 && hasRir(set) && +set.rir === 0;
+// Sets that say something about your strength: not warm-ups, RIR known and under 5, weight on the bar.
+const isWorkingSet = s => !s.wu && s.rir != null && s.rir < 5 && s.w > 0;
+
+// Round to the exercise's weight step. Step 0 (bodyweight only) just tidies to 2 decimals.
+const roundToStep = (x, step) => (step > 0 ? +(Math.round(x / step) * step).toFixed(3) : +(+x).toFixed(2));
+const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+
+// Average where later values count more: weights 1, 2, 3, … from oldest to newest.
+function recencyWeightedAverage(values) {
+  let sum = 0,
+    weights = 0;
+  values.forEach((x, i) => {
+    sum += x * (i + 1);
+    weights += i + 1;
+  });
+  return sum / weights;
+}
+
+/* ---------- Bodyweight lifts ----------
+   With "Load includes bodyweight" on (pull-ups, dips…), the maths uses you + the plate, while you always type
+   and see only the added kg. Each logged set remembers your bodyweight at the time (set.bw). */
+
+const bodyweightFor = ex => (ex?.bwl ? bodyweight() : 0);
+// A set in total-load terms: added kg + bodyweight (that day's, or today's if it wasn't recorded).
 const withBodyweight = (ex, s) =>
-  ex?.bwl ? { ...s, w: (s.w === '' || s.w == null ? 0 : +s.w) + (s.bw ?? bodyweight()) } : s; // a set in total-load space
-const toLoadedWeight = (ex, v) => {
+  ex?.bwl ? { ...s, w: (s.w === '' || s.w == null ? 0 : +s.w) + (s.bw ?? bodyweight()) } : s;
+// Back from total load to what you put on the bar, rounded to the step. '' = bodyweight only / no suggestion.
+const toLoadedWeight = (ex, total) => {
   if (ex?.bwl) {
-    const a = roundToStep(+v - bodyweight(), ex.inc);
-    return a > 0 ? a : '';
+    const added = roundToStep(+total - bodyweight(), ex.inc);
+    return added > 0 ? added : '';
   }
-  return v > 0 ? roundToStep(v, ex.inc) : '';
-}; // total load -> what you load ('' = bodyweight / no suggestion)
+  return total > 0 ? roundToStep(total, ex.inc) : '';
+};
+
 /* RIR is picked from a list: 0–5 in half steps, plus "5+" (stored as 6). A 5+ set stays in history and volume
    but, like a warm-up, never feeds suggestions, the strength estimate or the next-set adjustment. */
 const RIR_CHOICES = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6];
-const rirLabel = v => (v == null || v === '' ? '' : +v > 5 ? '5+' : fmt(v)),
-  rpeLabel = v => (v == null || v === '' ? '' : +v > 5 ? '<5' : fmt(10 - v));
-// How strong a lift has been lately vs. its longer-run level, at a similar rep count: recent 3 sessions vs. the last 10. Used to nudge planned % sets (max ±10%).
-function strengthTrend(ss, r) {
-  const by = new Map();
-  for (const s of ss)
-    if (isWorkingSet(s) && Math.abs(s.r - r) <= 1)
-      by.set(s.sess, Math.max(by.get(s.sess) || 0, estimate1RM(s.w, s.r, s.rir)));
-  const v = [...by.values()];
-  if (v.length < 2) return 1;
-  const rc = v.slice(-3);
-  let a = 0,
-    b = 0;
-  rc.forEach((x, i) => {
-    a += x * (i + 1);
-    b += i + 1;
-  });
-  const lg = v.slice(-10),
-    mean = lg.reduce((p, x) => p + x, 0) / lg.length;
-  return Math.min(1.1, Math.max(0.9, a / b / mean));
-}
-// Reference 1RM for % view: your tested 1RM, or else the estimate from recent working sets.
-async function reference1RM(ex) {
-  const p = state.pr[ex.id];
-  if (p) return { w: p.w + bodyweightFor(ex), est: false };
-  const ss = (await getAll('sets', 'ex', ex.id))
-      .filter(s => !s.wu)
-      .sort((a, b) => a.t - b.t)
-      .map(s => withBodyweight(ex, s)),
-    E = estimateStrength(ss, -99, 999);
-  return E ? { w: Math.round(E * 10) / 10, est: true } : null;
+
+/* ---------- Strength ---------- */
+
+// Your best e1RM in each session, oldest session first. `include` picks which working sets count.
+function bestE1rmPerSession(sets, include) {
+  const best = new Map();
+  for (const s of sets)
+    if (isWorkingSet(s) && include(s))
+      best.set(s.sess, Math.max(best.get(s.sess) || 0, estimate1RM(s.w, s.r, s.rir)));
+  return [...best.values()];
 }
 
-/* ---------- RIR double progression ---------- */
-// Per set, from the same set last session: reps you could have done at target RIR = reps + RIR - target.
-// Aim one more rep at the same weight; past the top of the range, reset to the bottom reps at a heavier e1RM-based weight.
-/* ---------- suggestions ----------
- Strength = estimated 1RM averaged over your last 4 sessions (recent ones count more), from working sets only:
- not warm-ups, RIR known and under 5. Sets in a rep range close to today's target are preferred, so a heavy-triple
- day doesn't inflate a light-day suggestion. Weight and reps then come from that strength number and the target. */
-const isWorkingSet = s => !s.wu && s.rir != null && s.rir < 5 && s.w > 0;
-function estimateStrength(ss, lo, hi) {
-  const est = f => {
-    const by = new Map();
-    for (const s of ss)
-      if (isWorkingSet(s) && f(s))
-        by.set(s.sess, Math.max(by.get(s.sess) || 0, estimate1RM(s.w, s.r, s.rir)));
-    const v = [...by.values()].slice(-4);
-    if (!v.length) return null;
-    let a = 0,
-      b = 0;
-    v.forEach((x, i) => {
-      const k = i + 1;
-      a += x * k;
-      b += k;
-    });
-    return a / b;
+/* Strength = your best e1RM in each of your last 4 sessions, averaged with recent sessions counting more.
+   Sets close to today's rep range (±3 reps) are preferred, so a heavy-triples day doesn't inflate a suggestion
+   for a light day of 12s. Falls back to all working sets, and returns null with no history.
+   `sets` must be sorted oldest first. */
+function estimateStrength(sets, repsLo, repsHi) {
+  const average = include => {
+    const best = bestE1rmPerSession(sets, include).slice(-4);
+    return best.length ? recencyWeightedAverage(best) : null;
   };
-  return est(s => s.r >= lo - 3 && s.r <= hi + 3) ?? est(() => true);
+  return average(s => s.r >= repsLo - 3 && s.r <= repsHi + 3) ?? average(() => true);
 }
+
+/* How strong a lift has been lately compared with its longer-run level, at a similar rep count (±1):
+   the last 3 sessions (recent ones counting more) against the plain average of the last 10.
+   1.04 means 4% stronger than usual. Kept within ±10%. Used to nudge planned % sets. */
+function strengthTrend(sets, reps) {
+  const best = bestE1rmPerSession(sets, s => Math.abs(s.r - reps) <= 1);
+  if (best.length < 2) return 1;
+  const recent = recencyWeightedAverage(best.slice(-3));
+  const longRun = best.slice(-10),
+    mean = longRun.reduce((sum, x) => sum + x, 0) / longRun.length;
+  return clamp(recent / mean, 0.9, 1.1);
+}
+
+// Working history: no warm-ups, oldest first.
+const sortedHistory = history => history.filter(s => !s.wu).sort((a, b) => a.t - b.t);
+
+/* The 1RM that % sets are based on: your tested 1RM if you have one, otherwise your estimated strength.
+   Returns { w: kg (total load), est: true if estimated } or null when there's nothing to go on. */
+function reference1RM(ex, testedPr, history) {
+  if (testedPr) return { w: testedPr.w + bodyweightFor(ex), est: false };
+  const sets = sortedHistory(history).map(s => withBodyweight(ex, s));
+  const strength = estimateStrength(sets, -99, 999);
+  return strength ? { w: Math.round(strength * 10) / 10, est: true } : null;
+}
+
+/* ---------- Suggestions for today's sets ----------
+   Double progression: keep the weight and add a rep each session; past the top of the rep range, go heavier
+   and start again at the bottom. Concretely, from the last session that had a working set in today's rep range:
+     - reps you could do at today's target RIR = that set's reps + its RIR − target RIR; aim for one more,
+     - but stay within what your averaged strength says you can do at that weight (between that and +2),
+     - above the range: drop to the bottom of the range at a heavier weight (at least one step up),
+     - below the range: bottom of the range at a lighter weight (at least one step down).
+   With no set in range yet, the weight comes straight from your strength at the bottom of the range.
+   Later sets aim for about one rep fewer every two sets, for fatigue. */
+
+const fatigueReps = setIndex => Math.floor(setIndex / 2);
+
+// Aim one rep above last time, within [what the average says, average + 2].
+const nextReps = (averageReps, lastTimeAtTarget) =>
+  Math.min(averageReps + 2, Math.max(averageReps, Math.round(lastTimeAtTarget) + 1));
+
+/* Suggested rows for `n` sets of `ex` (which carries today's target: lo–hi reps @ rir), from the exercise's
+   full set history. Returns { rows: [{ w, r, rir }], hint: 'Last: … · 8–12 reps @ 2 RIR' }. */
+function suggestSets(ex, n, history) {
+  const sets = sortedHistory(history);
+  const sessions = [...new Set(sets.map(s => s.sess))];
+  const lastSession = sets.filter(s => s.sess == sessions[sessions.length - 1]);
+  const hint = suggestionHint(ex, lastSession);
+  const rows = (weight, reps) =>
+    Array.from({ length: n }, (_, j) => ({
+      w: weight,
+      r: Math.max(ex.lo, reps - fatigueReps(j)),
+      rir: ex.rir,
+    }));
+
+  const bodyweightOnly = !(ex.inc > 0);
+  const lastTimeAtBodyweight = !ex.bwl && lastSession.length && Math.max(...lastSession.map(s => s.w)) === 0;
+  if (bodyweightOnly || lastTimeAtBodyweight) {
+    const { weight, reps } = suggestReps(ex, sets, lastSession);
+    return { rows: rows(weight, reps), hint };
+  }
+
+  const totals = sets.map(s => withBodyweight(ex, s));
+  const strength = estimateStrength(totals, ex.lo, ex.hi);
+  if (!strength) return { rows: Array.from({ length: n }, () => ({ w: '', r: ex.lo, rir: ex.rir })), hint };
+
+  // The heaviest working set in today's rep range, from the most recent session that has one.
+  let lastInRange = null;
+  for (let k = sessions.length - 1; k >= 0 && !lastInRange; k--)
+    lastInRange =
+      totals
+        .filter(s => s.sess == sessions[k] && isWorkingSet(s) && s.r >= ex.lo && s.r <= ex.hi)
+        .sort((a, b) => b.w - a.w || b.r - a.r)[0] || null;
+
+  const weightAtBottomOfRange = roundToStep(strength * fractionOf1RM(ex.lo, ex.rir), ex.inc);
+  let weight, reps;
+  if (lastInRange) {
+    const lastWeight = lastInRange.w;
+    reps = nextReps(
+      Math.round(repsAt(strength, lastWeight, ex.rir)),
+      lastInRange.r + lastInRange.rir - ex.rir,
+    );
+    weight = lastWeight;
+    if (reps > ex.hi) {
+      reps = ex.lo;
+      weight = Math.max(weightAtBottomOfRange, roundToStep(lastWeight + ex.inc, ex.inc));
+    } else if (reps < ex.lo) {
+      reps = ex.lo;
+      weight = Math.min(weightAtBottomOfRange, roundToStep(lastWeight - ex.inc, ex.inc));
+    }
+  } else {
+    reps = ex.lo;
+    weight = weightAtBottomOfRange;
+  }
+  return { rows: rows(toLoadedWeight(ex, weight), reps), hint };
+}
+
+/* Bodyweight exercises (or ones you did at bodyweight last time) progress in reps only. "Capacity" is
+   reps + RIR, the reps you could have done; it's averaged over the last 4 sessions like strength. */
+function suggestReps(ex, sets, lastSession) {
+  const capacity = new Map();
+  for (const s of sets)
+    if (!s.wu && s.rir != null && s.rir < 5 && (!(ex.inc > 0) || s.w === 0))
+      capacity.set(s.sess, Math.max(capacity.get(s.sess) || 0, s.r + s.rir));
+  const recent = [...capacity.values()].slice(-4);
+  const lastBest = lastSession
+    .filter(s => s.rir != null && s.rir < 5)
+    .reduce((best, s) => Math.max(best, s.r + s.rir), 0);
+  const weight = lastSession.length ? Math.max(...lastSession.map(s => s.w)) : '';
+  let reps = ex.lo;
+  if (recent.length) {
+    const averageReps = Math.round(recencyWeightedAverage(recent) - ex.rir);
+    reps = Math.max(ex.lo, lastBest ? nextReps(averageReps, lastBest - ex.rir) : averageReps + 1);
+  }
+  return { weight: weight || '', reps };
+}
+
+function suggestionHint(ex, lastSession) {
+  const aim = `${ex.lo}–${ex.hi} reps @ ${ex.rir} RIR`;
+  if (!lastSession.length) return `${aim} · no history yet`;
+  const last = lastSession.map(
+    s => `${weightLabel(s.w)}×${s.r}${s.rir != null ? ' @' + rirLabel(s.rir) : ''}`,
+  );
+  return `Last: ${last.join(', ')} · ${aim}`;
+}
+
+// Warm-up sets before the first working set: [fraction of the working weight, reps], by number of warm-ups.
 const WARMUP_RAMP = {
   1: [[0.6, 5]],
   2: [
@@ -1301,192 +1462,153 @@ const WARMUP_RAMP = {
     [0.7, 3],
     [0.85, 2],
   ],
-}; // warm-up % of working weight, reps
-async function suggestSets(ex, n) {
-  const ss = (await getAll('sets', 'ex', ex.id)).filter(s => !s.wu).sort((a, b) => a.t - b.t),
-    rows = [],
-    aim = `${ex.lo}–${ex.hi} reps @ ${ex.rir} RIR`,
-    sess = [...new Set(ss.map(s => s.sess))],
-    fat = j => Math.floor(j / 2), // later sets: about 1 rep fewer every 2 sets
-    sT = ex.bwl ? ss.map(s => withBodyweight(ex, s)) : ss;
-  const lastS = ss.filter(s => s.sess == sess[sess.length - 1]),
-    hint = lastS.length
-      ? `Last: ${lastS.map(s => `${weightLabel(s.w)}×${s.r}${s.rir != null ? ' @' + rirLabel(s.rir) : ''}`).join(', ')} · ${aim}`
-      : `${aim} · no history yet`;
-  if (!(ex.inc > 0) || (!ex.bwl && lastS.length && Math.max(...lastS.map(s => s.w)) === 0)) {
-    // bodyweight (or done at bodyweight last time): progress reps
-    const by = new Map();
-    for (const s of ss)
-      if (!s.wu && s.rir != null && s.rir < 5 && (!(ex.inc > 0) || s.w === 0))
-        by.set(s.sess, Math.max(by.get(s.sess) || 0, s.r + s.rir));
-    const v = [...by.values()].slice(-4);
-    let cap = null;
-    if (v.length) {
-      let a = 0,
-        b = 0;
-      v.forEach((x, i) => {
-        a += x * (i + 1);
-        b += i + 1;
-      });
-      cap = a / b;
-    }
-    const lb = lastS.filter(s => s.rir != null && s.rir < 5).reduce((m, s) => Math.max(m, s.r + s.rir), 0),
-      w = lastS.length ? Math.max(...lastS.map(s => s.w)) : '',
-      rS = cap == null ? null : Math.round(cap - ex.rir),
-      r =
-        rS == null
-          ? ex.lo
-          : Math.max(ex.lo, lb ? Math.min(rS + 2, Math.max(rS, Math.round(lb - ex.rir) + 1)) : rS + 1);
-    for (let j = 0; j < n; j++) rows.push({ w: w || '', r: Math.max(ex.lo, r - fat(j)), rir: ex.rir });
-    return { rows, hint };
-  }
-  const E = estimateStrength(sT, ex.lo, ex.hi);
-  if (!E) {
-    for (let j = 0; j < n; j++) rows.push({ w: '', r: ex.lo, rir: ex.rir });
-    return { rows, hint };
-  }
-  let Wb = null,
-    bt = null; // the weight you last used in today's rep range, and that set
-  for (let k = sess.length - 1; k >= 0 && Wb == null; k--) {
-    const t = sT
-      .filter(s => s.sess == sess[k] && isWorkingSet(s) && s.r >= ex.lo && s.r <= ex.hi)
-      .sort((a, b) => b.w - a.w || b.r - a.r)[0];
-    if (t) {
-      Wb = t.w;
-      bt = t;
-    }
-  }
-  let w, r;
-  if (Wb != null) {
-    const rS = Math.round(30 * (E / Wb - 1) - ex.rir); // reps the averaged strength says you can do at that weight
-    r = Math.min(rS + 2, Math.max(rS, Math.round(bt.r + bt.rir - ex.rir) + 1));
-    w = Wb; // one more than last time, kept within the average's guard rails
-    if (r > ex.hi) {
-      r = ex.lo;
-      w = Math.max(roundToStep(E * fractionOf1RM(ex.lo, ex.rir), ex.inc), roundToStep(Wb + ex.inc, ex.inc));
-    } else if (r < ex.lo) {
-      r = ex.lo;
-      w = Math.min(roundToStep(E * fractionOf1RM(ex.lo, ex.rir), ex.inc), roundToStep(Wb - ex.inc, ex.inc));
-    }
-  } else {
-    r = ex.lo;
-    w = roundToStep(E * fractionOf1RM(ex.lo, ex.rir), ex.inc);
-  }
-  for (let j = 0; j < n; j++)
-    rows.push({ w: toLoadedWeight(ex, w), r: Math.max(ex.lo, r - fat(j)), rir: ex.rir });
-  return { rows, hint };
-}
+};
 
-/* After you log a set, the sets after it (that you haven't edited) adjust to how that set really went.
-   % view: the weight moves to match today's strength. RIR view: the weight stays and the reps move,
-   unless they'd leave the rep range. Never more than ±10% from the plan, about 1.5% easier per set for fatigue. */
-async function adjustRemainingSetsPct(it, j, ex) {
-  const d = withBodyweight(ex, it.rows[j]);
-  if (+d.rir > 5 || d.wu || !(+d.w > 0) || !hasRir(d) || !(+d.r > 0) || !(ex.inc > 0)) return;
-  const now = estimate1RM(+d.w, +d.r, +d.rir),
-    by = new Map();
-  for (const s of (await getAll('sets', 'ex', ex.id)).map(s => withBodyweight(ex, s)))
-    if (s.sess != workout.sess && isWorkingSet(s) && Math.abs(s.r - d.r) <= 1)
-      by.set(s.sess, [s.t, Math.max(by.get(s.sess)?.[1] || 0, estimate1RM(s.w, s.r, s.rir))]);
-  let base = null;
-  const v = [...by.values()]
+/* ---------- Adjusting the rest of the exercise after each set ----------
+   After you log a set, the sets after it that you haven't edited adjust to how that set really went.
+   They never move more than ±10% from the plan.
+     % view:   the weights scale by today's strength compared with your usual strength at that rep count.
+     RIR view: the weight stays and the reps move to hit the target RIR, unless they'd leave the rep range,
+               in which case the reps go to the edge of the range and the weight moves instead.
+               Each following set assumes you're about 1.5% weaker, for fatigue.
+   Rows: { w, r, rir, pw: planned weight (total load), auto: true until you edit it, done, wu, adj: adjusted }. */
+
+// A logged set (in total load) that can tell us today's strength.
+const canAdjustFrom = (logged, ex) =>
+  !(+logged.rir > 5 || logged.wu || !(+logged.w > 0) || !hasRir(logged) || !(+logged.r > 0) || !(ex.inc > 0));
+
+// % view. `history` is the exercise's logged sets; sets from `currentSession` (today) are left out of "usual".
+function adjustRemainingSetsPct(item, j, ex, history, currentSession) {
+  const logged = withBodyweight(ex, item.rows[j]);
+  if (!canAdjustFrom(logged, ex)) return;
+  const today = estimate1RM(+logged.w, +logged.r, +logged.rir);
+
+  // Usual strength at this rep count (±1): best e1RM of each of the last 4 sessions, recent ones counting more.
+  const best = new Map(); // session -> [time, best e1RM]
+  for (const s of history.map(s => withBodyweight(ex, s)))
+    if (s.sess != currentSession && isWorkingSet(s) && Math.abs(s.r - logged.r) <= 1)
+      best.set(s.sess, [s.t, Math.max(best.get(s.sess)?.[1] || 0, estimate1RM(s.w, s.r, s.rir))]);
+  const recent = [...best.values()]
     .sort((a, b) => a[0] - b[0])
     .slice(-4)
     .map(x => x[1]);
-  if (v.length) {
-    let a = 0,
-      b = 0;
-    v.forEach((x, i) => {
-      a += x * (i + 1);
-      b += i + 1;
-    });
-    base = a / b;
-  } else {
-    const f = it.rows.find(
-      r => r.done && !r.wu && +withBodyweight(ex, r).w > 0 && hasRir(r) && Math.abs(+r.r - d.r) <= 1,
+  let usual = null;
+  if (recent.length) usual = recencyWeightedAverage(recent);
+  else {
+    // No history at this rep count yet: compare with today's first comparable set.
+    const first = item.rows.find(
+      r => r.done && !r.wu && +withBodyweight(ex, r).w > 0 && hasRir(r) && Math.abs(+r.r - logged.r) <= 1,
     );
-    if (f && f !== it.rows[j]) {
-      const fT = withBodyweight(ex, f);
-      base = estimate1RM(+fT.w, +fT.r, +fT.rir);
-    }
-  } // no history: compare with today's first set
-  if (!base) return;
-  const fac = Math.min(1.1, Math.max(0.9, now / base));
-  for (let q = j + 1; q < it.rows.length; q++) {
-    const r = it.rows[q];
-    if (r.done || r.wu || !r.auto || !(+r.pw > 0)) continue;
-    const w = toLoadedWeight(ex, r.pw * fac);
-    if (w !== r.w) {
-      r.w = w;
-      r.adj = true;
+    if (first && first !== item.rows[j]) {
+      const f = withBodyweight(ex, first);
+      usual = estimate1RM(+f.w, +f.r, +f.rir);
     }
   }
-}
-function adjustRemainingSetsRir(it, j, ex) {
-  if (it.mode == 'pct') return;
-  const d = withBodyweight(ex, it.rows[j]);
-  if (+d.rir > 5 || d.wu || !(+d.w > 0) || !hasRir(d) || !(+d.r > 0) || !(ex.inc > 0)) return;
-  const e = estimate1RM(+d.w, +d.r, +d.rir);
-  let k = 0;
-  for (let q = j + 1; q < it.rows.length; q++) {
-    const r = it.rows[q];
-    if (r.done || r.wu || !r.auto || !(+r.r > 0) || !hasRir(r)) continue;
-    const f = Math.pow(0.985, ++k),
-      pw = +r.pw || +r.w || 0,
-      cl = w =>
-        pw > 0 ? Math.min(roundToStep(pw * 1.1, ex.inc), Math.max(roundToStep(pw * 0.9, ex.inc), w)) : w;
-    let w = +withBodyweight(ex, r).w || 0,
-      rr = +r.r;
-    const w0 = w;
-    if (it.mode == 'pct' || !(w > 0)) w = cl(roundToStep(e * f * fractionOf1RM(rr, +r.rir), ex.inc));
-    else {
-      rr = Math.round(30 * ((e * f) / w - 1) - +r.rir);
-      if (rr > it.hi) {
-        rr = it.hi;
-        w = cl(roundToStep(e * f * fractionOf1RM(rr, +r.rir), ex.inc));
-      } else if (rr < it.lo) {
-        rr = it.lo;
-        w = cl(roundToStep(e * f * fractionOf1RM(rr, +r.rir), ex.inc));
-      }
-    }
-    if (rr !== +r.r || w !== w0) {
-      r.r = rr;
-      if (w !== w0) r.w = toLoadedWeight(ex, w);
-      r.adj = true;
+  if (!usual) return;
+
+  const factor = clamp(today / usual, 0.9, 1.1);
+  for (let q = j + 1; q < item.rows.length; q++) {
+    const row = item.rows[q];
+    if (row.done || row.wu || !row.auto || !(+row.pw > 0)) continue;
+    const w = toLoadedWeight(ex, row.pw * factor);
+    if (w !== row.w) {
+      row.w = w;
+      row.adj = true;
     }
   }
 }
 
-/* ---------- row info: e1RM + PR check ---------- */
-function setInfo(r0, ex) {
-  const b = bodyweightFor(ex),
-    pr0 = state.pr[ex.id],
-    pr = pr0 && { ...pr0, w: pr0.w + b };
-  if (r0.wu) return { s: 'Warm-up', w: 0 };
-  const r = b ? withBodyweight(ex, r0) : r0;
-  if (+r0.rir > 5 && r0.rir !== '') return { s: '5+: not used for suggestions', w: 0 };
-  if (!(r.w > 0 && r.r > 0 && hasRir(r))) return { s: '', w: 0 };
-  if (isMaxTest(r)) {
-    let s = 'Counts as a 1RM';
-    if (pr) {
-      const d = (r.w / pr.w - 1) * 100;
-      s += ` · ${d >= 0 ? '+' : ''}${d.toFixed(1)}% vs 1RM`;
+// RIR view.
+function adjustRemainingSetsRir(item, j, ex) {
+  if (item.mode == 'pct') return;
+  const logged = withBodyweight(ex, item.rows[j]);
+  if (!canAdjustFrom(logged, ex)) return;
+  const today = estimate1RM(+logged.w, +logged.r, +logged.rir);
+
+  let setsAhead = 0;
+  for (let q = j + 1; q < item.rows.length; q++) {
+    const row = item.rows[q];
+    if (row.done || row.wu || !row.auto || !(+row.r > 0) || !hasRir(row)) continue;
+    const strength = today * Math.pow(0.985, ++setsAhead); // about 1.5% weaker per set, for fatigue
+    const planned = +row.pw || +row.w || 0;
+    const withinPlan = w =>
+      planned > 0
+        ? Math.min(roundToStep(planned * 1.1, ex.inc), Math.max(roundToStep(planned * 0.9, ex.inc), w))
+        : w;
+    const weightFor = reps => withinPlan(roundToStep(strength * fractionOf1RM(reps, +row.rir), ex.inc));
+
+    const weightBefore = +withBodyweight(ex, row).w || 0;
+    let weight = weightBefore,
+      reps = +row.r;
+    if (!(weight > 0)) weight = weightFor(reps);
+    else {
+      reps = Math.round(repsAt(strength, weight, +row.rir));
+      if (reps > item.hi) {
+        reps = item.hi;
+        weight = weightFor(reps);
+      } else if (reps < item.lo) {
+        reps = item.lo;
+        weight = weightFor(reps);
+      }
     }
+    if (reps !== +row.r || weight !== weightBefore) {
+      row.r = reps;
+      if (weight !== weightBefore) row.w = toLoadedWeight(ex, weight);
+      row.adj = true;
+    }
+  }
+}
+
+/* ---------- What to show under a set ----------
+   The set's e1RM and how it compares with your tested 1RM (`testedPr`, or undefined).
+   Returns { s: text, w: 1 when the set suggests your 1RM is out of date (e1RM more than 3% above it) }. */
+function setInfo(row, ex, testedPr) {
+  const bw = bodyweightFor(ex),
+    pr = testedPr && { ...testedPr, w: testedPr.w + bw };
+  if (row.wu) return { s: 'Warm-up', w: 0 };
+  const set = bw ? withBodyweight(ex, row) : row;
+  if (+row.rir > 5 && row.rir !== '') return { s: '5+: not used for suggestions', w: 0 };
+  if (!(set.w > 0 && set.r > 0 && hasRir(set))) return { s: '', w: 0 };
+  const vs1RM = d => ` · ${d >= 0 ? '+' : ''}${d.toFixed(1)}% vs 1RM`;
+  if (isMaxTest(set)) {
+    let s = 'Counts as a 1RM';
+    if (pr) s += vs1RM((set.w / pr.w - 1) * 100);
     return { s, w: 0 };
   }
-  const e = estimate1RM(r.w, r.r, r.rir);
+  const e = estimate1RM(set.w, set.r, set.rir);
   let s = 'e1RM ' + fmt(e);
   if (pr) {
     const d = (e / pr.w - 1) * 100;
-    s += ` · ${d >= 0 ? '+' : ''}${d.toFixed(1)}% vs 1RM`;
+    s += vs1RM(d);
     if (d > 3) return { s: '⚠ ' + s, w: 1 };
   }
   return { s, w: 0 };
 }
-/* ---------- state ---------- */
+/* App state, loading data, plans, and building a workout.
+ *
+ * Data model (field names are short because they're stored on the phone and in backups; don't rename them)
+ *   exercise   { id, name, mode: 'rir'|'pct' (last used), inc: weight step (0 = bodyweight only),
+ *                lo, hi: rep range and rir: target RIR for quick workouts, wu: warm-up sets (0–4),
+ *                pb: lifetime best kg, bwl: true if the load includes bodyweight }
+ *   set        { id, exId, sess: workout id (its start time), t: time logged, w: kg, r: reps, rir: RIR or null,
+ *                test: 1-rep max test, wu: warm-up, bw: bodyweight then, wn: workout name, pd: 'planId:dayIndex' }
+ *   pr_history { id, exId, w: tested 1RM in kg, t: date, setId }   (the latest one is your current 1RM)
+ *   template   a plan: { id, name, weeks, active, runStart, days: [{ name, items: [slot] }] }
+ *     slot     RIR:  { exId, mode: 'rir', n: sets, lo, hi, rirW: [target RIR for week 1, week 2, …] }
+ *              %1RM: { exId, mode: 'pct', lines: [{ n: sets, r: reps, p: % of 1RM }] }
+ *   workout    the workout in progress (kept in localStorage):
+ *              { sess, name, pd, rest: rest seconds, restEnd: when the timer ends, items: [item] }
+ *     item     one exercise: { exId, mode, lo, hi, rirT: target RIR, rows: [row], hint, bwo: bodyweight added,
+ *                ref: reference 1RM for % view, refEst: true if ref is an estimate }
+ *     row      one set: { w, r, rir, pw: planned weight (total load), auto: untouched by you, done, id: logged set,
+ *                wu: warm-up, adj: adjusted after an earlier set }
+ */
+
+// state.tab: the bottom-bar tab. state.view: a page open on top of it ({ t: 'exd' | 'tple' | 'wed' | 'set' }).
+// state.prl / state.hist: tested 1RMs and logged sets of the exercise whose page is open.
 let state = { tab: 'train', view: null, ex: [], tpl: [], pr: {}, prl: [], hist: [] },
-  draft = null,
-  workout = null;
+  draft = null, // a copy of the exercise or plan being edited, saved only when you tap Save
+  workout = null; // the workout in progress (see the data model above)
 try {
   workout = JSON.parse(localStorage.getItem(LS_PREFIX + 'w') || 'null');
 } catch {}
@@ -1496,105 +1618,162 @@ const saveWorkout = () => {
   } catch {}
 };
 const exerciseById = id => state.ex.find(e => e.id == id);
+
 async function loadState() {
   state.ex = await getAll('exercises');
   state.tpl = await getAll('templates');
   state.sets = await getAll('sets');
   state.pr = {};
-  state.tpl.forEach(t => {
-    if (!t.weeks) t.weeks = 8;
-    if (!t.days) {
-      t.days = [{ name: 'Day 1', items: t.items || [] }];
-      delete t.items;
-    }
-    for (const d of t.days)
-      for (const it of d.items) {
-        if (!it.mode) it.mode = exerciseById(it.exId)?.mode == 'pct' ? 'pct' : 'rir';
-        if (it.mode == 'pct' && !it.lines?.length) {
-          it.lines = linesFromText(it.text);
-          if (!it.lines.length) it.lines = [newPctLine()];
-        }
-      }
-  });
+  state.tpl.forEach(upgradeOldPlan);
+  // state.pr[exerciseId] = the latest tested 1RM
   (await getAll('pr_history')).sort((a, b) => a.t - b.t).forEach(p => (state.pr[p.exId] = p));
-} // latest tested PR per exercise
+}
 
-/* ---------- plan slots: each one is RIR (sets, rep range, target RIR) or % of 1RM (lines of sets x reps @ % with a target RPE) ---------- */
-// Old plans stored % sets as text like "3*80%x5"; turn those into lines once.
-function linesFromText(t) {
+/* ---------- Plans ---------- */
+
+// Older versions stored plans differently; bring them up to date in memory (saved on the next Save).
+function upgradeOldPlan(t) {
+  if (!t.weeks) t.weeks = 8;
+  if (!t.days) {
+    t.days = [{ name: 'Day 1', items: t.items || [] }];
+    delete t.items;
+  }
+  for (const d of t.days)
+    for (const it of d.items) {
+      if (!it.mode) it.mode = exerciseById(it.exId)?.mode == 'pct' ? 'pct' : 'rir';
+      if (it.mode == 'pct' && !it.lines?.length) {
+        it.lines = linesFromText(it.text);
+        if (!it.lines.length) it.lines = [newPctLine()];
+      }
+    }
+}
+
+// Old plans stored % sets as text like "3*80%x5"; turn those into lines.
+function linesFromText(text) {
   const out = [];
-  for (const l of String(t || '').split('\n')) {
+  for (const l of String(text || '').split('\n')) {
     const m = l.trim().match(/^(?:(\d+)\s*[*×]\s*)?(\d+(?:\.\d+)?)%\s*x\s*(\d+)$/i);
     if (m) out.push({ n: +(m[1] || 1), p: +m[2], r: +m[3] });
   }
   return out;
 }
-const rememberTrackingMode = async (ex, m) => {
-  if (ex && ex.mode != m) {
-    ex.mode = m;
+
+// New plan slots and quick adds start in the tracking mode you used last for that exercise.
+const rememberTrackingMode = async (ex, mode) => {
+  if (ex && ex.mode != mode) {
+    ex.mode = mode;
     await dbPut('exercises', ex);
   }
-}; // new plan slots and quick adds start in the mode you used last
-const newPctLine = () => ({ n: 3, r: 3, p: 75 });
-// RIR slots: one target RIR per week of the plan.
-const weeklyRirTargets = (it, weeks, ex) => {
-  const a = Array.isArray(it.rirW) ? it.rirW.slice(0, weeks) : [],
-    d = a.length ? a[a.length - 1] : (it.rir ?? ex?.rir ?? 2);
-  while (a.length < weeks) a.push(d);
-  return a;
 };
-async function addExerciseToWorkout(it, wk = 1) {
-  const ex = exerciseById(it.exId);
+const newPctLine = () => ({ n: 3, r: 3, p: 75 });
+
+// A RIR slot's target RIR for each week of the plan, padded with the last value (or the default).
+const weeklyRirTargets = (it, weeks, ex) => {
+  const targets = Array.isArray(it.rirW) ? it.rirW.slice(0, weeks) : [],
+    fill = targets.length ? targets[targets.length - 1] : (it.rir ?? ex?.rir ?? 2);
+  while (targets.length < weeks) targets.push(fill);
+  return targets;
+};
+
+/* Where you are in a plan, counted from the workouts logged since you started it.
+   { total: plan days done, need: total days in the plan, done, wk: current week,
+     wdays: day indexes done this week, nx: index of the next day } */
+function planProgress(t) {
+  const daysPerWeek = t.days.length,
+    dayOfSession = new Map();
+  state.sets
+    .filter(s => s.pd && s.pd.startsWith(t.id + ':') && s.sess >= t.runStart)
+    .sort((a, b) => a.t - b.t)
+    .forEach(s => {
+      if (!dayOfSession.has(s.sess)) dayOfSession.set(s.sess, +s.pd.split(':')[1]);
+    });
+  const days = [...dayOfSession.values()],
+    total = days.length,
+    need = t.weeks * daysPerWeek,
+    weeksDone = Math.floor(total / daysPerWeek);
+  return {
+    total,
+    need,
+    done: total >= need,
+    wk: Math.min(weeksDone + 1, t.weeks),
+    wdays: new Set(days.slice(weeksDone * daysPerWeek)),
+    nx: total ? (days[total - 1] + 1) % daysPerWeek : 0,
+  };
+}
+
+/* ---------- Building a workout ---------- */
+
+// The 1RM % sets are based on, for an exercise (see reference1RM in training.js).
+async function loadReference1RM(ex) {
+  return reference1RM(ex, state.pr[ex.id], await getAll('sets', 'ex', ex.id));
+}
+
+/* Add an exercise to the workout in progress, with its sets filled in.
+   `slot` is a plan slot (or { exId, n } for a quick add); `week` is the plan week, which picks the target RIR.
+   RIR slots get suggested weight and reps. % slots get the plan's % of your reference 1RM, nudged (max ±10%)
+   by how strong you've been lately at that rep count. Warm-ups, if the exercise has them, go first. */
+async function addExerciseToWorkout(slot, week = 1) {
+  const ex = exerciseById(slot.exId);
   if (!ex) return;
-  const pk = (a, b) => (a === '' || a == null ? b : a),
-    mode = it.mode || (ex.mode == 'pct' ? 'pct' : 'rir'),
-    lo = pk(it.lo, ex.lo) || 5,
-    hi = pk(it.hi, ex.hi) || Math.max(lo, 8),
-    rirT =
-      Array.isArray(it.rirW) && it.rirW.length
-        ? +it.rirW[Math.min(wk, it.rirW.length) - 1]
-        : (pk(it.rir, ex.rir) ?? 2),
-    item = { exId: ex.id, mode, lo, hi, rirT, rows: [], hint: '', bwo: bodyweightFor(ex) },
-    g = await suggestSets({ ...ex, lo, hi, rir: rirT }, mode == 'pct' && it.lines?.length ? 0 : it.n || 3);
-  item.hint = g.hint;
+  const orDefault = (value, fallback) => (value === '' || value == null ? fallback : value),
+    mode = slot.mode || (ex.mode == 'pct' ? 'pct' : 'rir'),
+    lo = orDefault(slot.lo, ex.lo) || 5,
+    hi = orDefault(slot.hi, ex.hi) || Math.max(lo, 8),
+    targetRir =
+      Array.isArray(slot.rirW) && slot.rirW.length
+        ? +slot.rirW[Math.min(week, slot.rirW.length) - 1]
+        : (orDefault(slot.rir, ex.rir) ?? 2),
+    plannedPct = mode == 'pct' && slot.lines?.length,
+    item = { exId: ex.id, mode, lo, hi, rirT: targetRir, rows: [], hint: '', bwo: bodyweightFor(ex) },
+    suggestion = suggestSets(
+      { ...ex, lo, hi, rir: targetRir },
+      plannedPct ? 0 : slot.n || 3,
+      await getAll('sets', 'ex', ex.id),
+    );
+  item.hint = suggestion.hint;
   if (mode == 'pct') {
-    const ref = await reference1RM(ex);
+    const ref = await loadReference1RM(ex);
     item.ref = ref?.w;
     item.refEst = ref?.est;
   }
-  if (mode == 'pct' && it.lines?.length) {
-    // planned % sets: the plan's %, nudged (max ±10%) by your recent trend at that rep count
-    const ss = (await getAll('sets', 'ex', ex.id))
-      .filter(s => !s.wu)
-      .sort((a, b) => a.t - b.t)
-      .map(s => withBodyweight(ex, s));
-    let moved = 0;
-    for (const l of it.lines) {
-      const r = Math.max(1, Math.round(+l.r || 1)),
-        f = strengthTrend(ss, r),
-        wp = item.ref ? ((+l.p || 0) / 100) * item.ref : 0;
-      if (f !== 1) moved = f;
-      for (let k = 0; k < Math.max(1, Math.round(+l.n || 1)); k++)
-        item.rows.push({ w: wp > 0 ? toLoadedWeight(ex, wp * f) : '', r, rir: '', pw: wp, auto: true });
+
+  if (plannedPct) {
+    const history = sortedHistory(await getAll('sets', 'ex', ex.id)).map(s => withBodyweight(ex, s));
+    let nudge = 0;
+    for (const line of slot.lines) {
+      const reps = Math.max(1, Math.round(+line.r || 1)),
+        trend = strengthTrend(history, reps),
+        planned = item.ref ? ((+line.p || 0) / 100) * item.ref : 0;
+      if (trend !== 1) nudge = trend;
+      for (let k = 0; k < Math.max(1, Math.round(+line.n || 1)); k++)
+        item.rows.push({
+          w: planned > 0 ? toLoadedWeight(ex, planned * trend) : '',
+          r: reps,
+          rir: '',
+          pw: planned,
+          auto: true,
+        });
     }
+    // Hint: the nudge, then what you did last time (without the RIR target, which doesn't apply here).
     const last = (item.hint || '').startsWith('Last:')
       ? item.hint.replace(/ · \d+–\d+ reps @ [\d.]+ RIR$/, '')
       : '';
     item.hint = [
-      moved ? `${moved > 1 ? '+' : ''}${Math.round((moved - 1) * 100)}% vs plan from recent sessions` : '',
+      nudge ? `${nudge > 1 ? '+' : ''}${Math.round((nudge - 1) * 100)}% vs plan from recent sessions` : '',
       last,
     ]
       .filter(Boolean)
       .join(' · ');
-  } else item.rows = g.rows.map(r => ({ ...r, pw: (+r.w || 0) + item.bwo, auto: true }));
+  } else item.rows = suggestion.rows.map(r => ({ ...r, pw: (+r.w || 0) + item.bwo, auto: true }));
+
   if (!item.rows.length) item.rows.push({ w: '', r: '', rir: '' });
-  const nw = Math.min(4, Math.max(0, Math.round(+ex.wu || 0)));
-  if (nw) {
-    const w0 = +item.rows[0].w || 0;
+  const warmups = Math.min(4, Math.max(0, Math.round(+ex.wu || 0)));
+  if (warmups) {
+    const working = +item.rows[0].w || 0;
     item.rows.unshift(
-      ...WARMUP_RAMP[nw].map(([p, r]) => ({
-        w: w0 && ex.inc > 0 ? roundToStep(w0 * p, ex.inc) : '',
-        r,
+      ...WARMUP_RAMP[warmups].map(([fraction, reps]) => ({
+        w: working && ex.inc > 0 ? roundToStep(working * fraction, ex.inc) : '',
+        r: reps,
         rir: '',
         wu: true,
       })),
@@ -1603,49 +1782,29 @@ async function addExerciseToWorkout(it, wk = 1) {
   workout.items.push(item);
 }
 
-async function startWorkout(tid, day = 0) {
+// Start a workout: a plan day (planId, dayIndex) or a quick workout (no planId).
+async function startWorkout(planId, day = 0) {
   picker = null;
   showTrainHome = false;
-  const t = tid ? state.tpl.find(x => x.id == tid) : null,
-    dy = t && t.days[day];
+  const plan = planId ? state.tpl.find(x => x.id == planId) : null,
+    planDay = plan && plan.days[day];
   workout = {
     sess: Date.now(),
-    name: dy ? `${t.name} · ${dy.name}` : 'Quick workout',
-    pd: dy ? `${t.id}:${day}` : undefined,
+    name: planDay ? `${plan.name} · ${planDay.name}` : 'Quick workout',
+    pd: planDay ? `${plan.id}:${day}` : undefined,
     rest: +lsGet('rest') || 120,
     restEnd: 0,
     items: [],
   };
-  if (dy) {
-    const wk = planProgress(t).wk;
-    for (const it of dy.items) await addExerciseToWorkout(it, wk);
+  if (planDay) {
+    const week = planProgress(plan).wk;
+    for (const slot of planDay.items) await addExerciseToWorkout(slot, week);
   }
   saveWorkout();
   render();
 }
-
-function planProgress(t) {
-  const dpw = t.days.length,
-    seen = new Map();
-  state.sets
-    .filter(s => s.pd && s.pd.startsWith(t.id + ':') && s.sess >= t.runStart)
-    .sort((a, b) => a.t - b.t)
-    .forEach(s => {
-      if (!seen.has(s.sess)) seen.set(s.sess, +s.pd.split(':')[1]);
-    });
-  const days = [...seen.values()],
-    total = days.length,
-    need = t.weeks * dpw;
-  return {
-    total,
-    need,
-    done: total >= need,
-    wk: Math.min(Math.floor(total / dpw) + 1, t.weeks),
-    wdays: new Set(days.slice(Math.floor(total / dpw) * dpw)),
-    nx: total ? (days[total - 1] + 1) % dpw : 0,
-  };
-}
-/* ---------- rest timer ---------- */
+/* Rest timer between sets. It starts when you log a set, beeps and vibrates when time's up, and survives
+   closing the app (the end time is saved with the workout). The bar at the bottom of the workout screen. */
 let audioCtx,
   alarmedAt = 0;
 const clockText = x => Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0');
@@ -1721,6 +1880,9 @@ function tickRest() {
   if (el) el.textContent = elapsedText();
 }
 setInterval(tickRest, 250);
+/* Bits of UI shared by several screens. Views are functions that return HTML strings; render() puts them on
+   the page. Every user-typed value goes through esc() first. */
+
 const barbellProgress = (n, done, cur, label) =>
   `<div class=bb role=img aria-label="${esc(label)}"><i class="pl pb"></i><i class="pl pr"></i><i class=sl></i><div class=shaft>${Array.from({ length: n }, (_, i) => `<i${i < done ? ' class=d' : cur && i == done ? ' class=n' : ''}></i>`).join('')}</div><i class=sl></i><i class="pl pr"></i><i class="pl pb"></i></div>`;
 const NAV_ICONS = {
@@ -1738,16 +1900,15 @@ function rirSelect(attrs, v, { pct = false, max5 = false, blank = true } = {}) {
   }
   return `<select ${attrs} class="pick${cur === '' ? ' ph' : ''}">${blank ? `<option value=""${cur === '' ? ' selected' : ''}>${pct ? 'RPE' : 'RIR'}</option>` : ''}${(pct ? vals.slice().reverse() : vals).map(x => `<option value="${x}"${x === cur ? ' selected' : ''}>${pct ? rpeLabel(x) : rirLabel(x)}</option>`).join('')}</select>`;
 }
-/* ---------- views ---------- */
-const opts = id =>
-  state.ex
-    .map(x => `<option value="${x.id}" ${x.id == id ? 'selected' : ''}>${esc(x.name)}</option>`)
-    .join('');
 
 const COG_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
 const pageTitle = t =>
   `<div class=hd><h2>${t}</h2><button class=cog data-a=settings aria-label="Settings">${COG_ICON}</button></div>`; // every tab's title row, with the settings cog
+/* Type-to-find exercises, used when adding or replacing an exercise in a workout, a plan or a past workout.
+   Empty search: your most-used exercises as chips. While typing: matches ranked by where the text matches,
+   with "New exercise" at the end when nothing matches exactly. */
+
 const exercisesByName = () =>
   state.ex.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 /* ---------- type-to-find exercises (like Home log): most-used chips when empty, ranked matches while typing ---------- */
@@ -1829,6 +1990,9 @@ function pickerFullList() {
       .join('') || '<p class=m>No exercise matches.</p>'
   );
 }
+/* Train tab: plans to start (or the workout in progress), and the workout screen itself: one card per
+   exercise with a row per set, the progress bar and the rest timer. */
+
 function updateSetInfo(s) {
   const it = workout.items[s.dataset.i];
   $('.inf>span', s).innerHTML = setInfoHtml(it, it.rows[s.dataset.j], exerciseById(it.exId));
@@ -1870,7 +2034,7 @@ function exerciseCard(it, i) {
 }
 function setInfoHtml(it, r, ex) {
   const P = it.mode == 'pct',
-    x = setInfo(r, ex),
+    x = setInfo(r, ex, state.pr[ex.id]),
     kg = P
       ? it.bwo
         ? +r.w > 0
@@ -1952,6 +2116,8 @@ function renderTrain() {
     restTimerBar()
   );
 }
+/* Exercises tab: the list with its search box, and an exercise's page (settings, tested 1RMs, history charts). */
+
 let exerciseFilter = ''; // Exercises tab search text
 const matchesFilter = n => {
   n = n.toLowerCase();
@@ -2120,6 +2286,8 @@ async function openExerciseHistory(id) {
   await loadState();
   render();
 }
+/* History tab: month calendar, every workout, and editing a past workout. */
+
 const dayKey = t => {
   const d = new Date(t);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -2321,6 +2489,8 @@ async function saveEditedWorkout() {
   render();
   toast('Workout saved');
 }
+/* Plans tab: your weekly plans, and the plan editor (days, exercises, RIR or % slots, weekly RIR targets). */
+
 function renderPlans() {
   return (
     pageTitle('Plans') +
@@ -2396,6 +2566,8 @@ function renderPlanEditor() {
     `<div class=row><button class="b p" data-a=tplSave>Save</button>${draft.id ? '<button class=b data-a=tplDel>Delete</button>' : ''}</div>`
   );
 }
+/* Settings page (the cog): your weight, height and BMI, backups, version and Check for updates. */
+
 // BMI = kg / m². Categories are the WHO adult ranges; they don't account for muscle mass.
 const bmiValue = () => {
   const w = bodyweight(),
@@ -2418,6 +2590,8 @@ function renderSettings() {
  <div class=row><button class=b data-a=backup>Export</button><button class=b data-a=restore>Import</button></div><input type=file id=imp accept=".json,application/json" hidden></div>
  <div class=card><b>App</b><div class=m>Lift Log <span id=verl>v${VER}</span></div><button class=b style="width:100%;margin-top:8px" data-a=upd id=updb>Check for updates</button></div>`;
 }
+/* Drawing the screen and the phone's back gesture. */
+
 /* ---------- phone back gesture / back button: close the open page instead of leaving the app ---------- */
 const pageDepth = () => (state.view || picker || (workout && !showTrainHome && state.tab == 'train') ? 1 : 0);
 let ignoreNextPop = false;
@@ -2497,7 +2671,9 @@ function render() {
   slideDir = 0;
   syncBackGesture();
 }
-/* ---------- events ---------- */
+/* Event handling. Listeners sit on the app container, not on each element, because screens are redrawn as
+   HTML. Typing updates the data directly (and redraws only what depends on it); swiping left/right changes tab. */
+
 const setPath = (o, p, v) => {
   const k = p.split('.'),
     l = k.pop();
@@ -2743,6 +2919,10 @@ app.addEventListener('click', e => {
   const b = e.target.closest('[data-a]');
   if (b && !b.disabled) actions[b.dataset.a]?.(b.closest('.set'), b.dataset);
 });
+/* What every button does. A button says which action it runs with data-a="name" and passes values with other
+   data- attributes; the click handler (events.js) calls actions[name](setRow, button.dataset), where setRow
+   is the workout set row the button is in, if any. */
+
 const closePage = () => {
   state.view = null;
   draft = null;
@@ -3062,11 +3242,12 @@ const actions = {
     r.id = await dbPut('sets', rec);
     r.done = true;
     delete r.adj;
-    if (it.mode == 'pct') await adjustRemainingSetsPct(it, +s.dataset.j, ex);
+    if (it.mode == 'pct')
+      await adjustRemainingSetsPct(it, +s.dataset.j, ex, await getAll('sets', 'ex', ex.id), workout.sess);
     else adjustRemainingSetsRir(it, +s.dataset.j, ex);
     saveWorkout();
     startRest();
-    const x = setInfo(r, ex),
+    const x = setInfo(r, ex, state.pr[ex.id]),
       pr = state.pr[ex.id];
     if (test) {
       const pb = ex.pb || 0,
@@ -3089,7 +3270,7 @@ const actions = {
       ex = exerciseById(it.exId);
     if (it.mode == d.m) return;
     if (d.m == 'pct' && !(it.ref > 0)) {
-      const ref = await reference1RM(ex);
+      const ref = await loadReference1RM(ex);
       if (!ref)
         return toast(
           `No 1RM for ${ex.name} yet. Add a tested 1RM in Exercises, or log a few RIR sets first.`,
@@ -3340,6 +3521,9 @@ const actions = {
     }
   },
 };
+/* Backups. Manual: export everything to a JSON file and import it back (validated field by field).
+   Automatic: a few seconds after each change, the same file is saved to a private GitHub repo. */
+
 function lastBackupTime() {
   try {
     return +localStorage.getItem(LS_PREFIX + 'lb') || 0;
@@ -3507,6 +3691,7 @@ const githubHeaders = (g, a = 'application/vnd.github+json') => ({
   Authorization: 'Bearer ' + g.token,
   Accept: a,
 });
+let backupTimer;
 function markDataChanged() {
   lsSet('dirty', '1');
   clearTimeout(backupTimer);
@@ -3623,7 +3808,7 @@ Object.assign(actions, {
   },
 });
 addEventListener('online', () => githubConfig() && autoBackup());
-/* ---------- boot / PWA ---------- */
+/* Start-up: register the service worker (offline use), open the database, draw the first screen. */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http'))
   navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' }).catch(() => {});
 navigator.storage?.persist?.();

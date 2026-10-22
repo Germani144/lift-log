@@ -1,4 +1,5 @@
-/* ---------- rest timer ---------- */
+/* Rest timer between sets. It starts when you log a set, beeps and vibrates when time's up, and survives
+   closing the app (the end time is saved with the workout). The bar at the bottom of the workout screen. */
 let audioCtx,
   alarmedAt = 0;
 const clockText = x => Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0');

@@ -1,3 +1,5 @@
+/* Settings page (the cog): your weight, height and BMI, backups, version and Check for updates. */
+
 // BMI = kg / m². Categories are the WHO adult ranges; they don't account for muscle mass.
 const bmiValue = () => {
   const w = bodyweight(),

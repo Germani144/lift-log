@@ -1,3 +1,5 @@
+/* Drawing the screen and the phone's back gesture. */
+
 /* ---------- phone back gesture / back button: close the open page instead of leaving the app ---------- */
 const pageDepth = () => (state.view || picker || (workout && !showTrainHome && state.tab == 'train') ? 1 : 0);
 let ignoreNextPop = false;
