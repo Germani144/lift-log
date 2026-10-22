@@ -30,12 +30,12 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
 
 ## Making changes
 
-1. Edit `index.html` (the whole app: HTML, CSS and JavaScript).
-2. Run the build, which updates the security hash and the offline-cache version:
+1. Edit the source in `src/` (see **Code layout** below). Don't edit `index.html` directly: it's generated.
+2. Run the build, which assembles `index.html` from `src/` and updates the security hash and the offline-cache version:
    ```
    python3 tools/build.py
    ```
-   Skipping this step blanks the app, because the browser refuses to run a script whose hash doesn't match.
+   Skipping this step leaves `index.html` out of date (`build.py --check` and CI fail), and a stale hash would blank the app, because the browser refuses to run a script whose hash doesn't match.
    It also bumps the version number (shown as e.g. **v1.4** on the startup screen and in Settings) whenever the app changed since the last commit, so every pushed update has its own number.
 3. Run the tests:
    ```
@@ -45,6 +45,31 @@ Everything lives in the browser on your phone (IndexedDB), with optional automat
    ```
 4. Commit and push. GitHub runs the same checks on every push (Actions → Tests), and emails you if one fails.
 5. Check it's live: open https://germani144-lift.github.io/lift-log/sw.js and look for the new `const VER`. If GitHub Pages didn't publish it, push again to re-trigger the build.
+
+## Code layout
+
+```
+src/index.html        page shell (head, splash screen); the build inlines the CSS and JS into it
+src/styles.css        all styles
+src/js/
+  version.js          app version (written by the build)
+  core/dom.js         small DOM and formatting helpers
+  core/storage.js     localStorage (every key prefixed "lift-log:") and IndexedDB
+  core/training.js    the training maths: e1RM, strength estimate, suggestions, next-set adjustment
+  core/state.js       app state, loading data, plans, building a workout
+  core/rest-timer.js  rest timer between sets
+  views/*.js          one file per screen (train, exercises, history, plans, settings) plus shared bits
+  app/navigation.js   render() and the phone back gesture
+  app/events.js       typing, keyboard, swipe and click handling
+  app/actions.js      what every button does
+  backup.js           export/import and automatic GitHub backup
+  boot.js             start-up
+tools/build.py        assembles index.html and runs the security checks
+tests/run.py          browser tests
+sw.js                 service worker (offline cache)
+```
+
+The JavaScript files are plain scripts that share one scope, loaded in the order listed in `JS_FILES` in `tools/build.py`. The build inlines them into a single `<script>` so the app stays one self-contained file with a strict, hash-based Content-Security-Policy, and needs no bundler: Python is the only build tool. Source is formatted with [Prettier](https://prettier.io) (`npx prettier --write "src/**/*.{js,css}"`, settings in `.prettierrc.json`).
 
 ## Offline and shared storage
 

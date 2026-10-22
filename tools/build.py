@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Lift Log build + security check.
 
-Run after editing any app file:
-    python3 tools/build.py           # update the CSP script hash and the service-worker cache version
+The app's source lives in src/ (one HTML shell, one stylesheet, and the JavaScript split into files).
+The build assembles them into a single self-contained index.html, which is what GitHub Pages serves.
+
+Run after editing anything in src/ (or sw.js / the manifest):
+    python3 tools/build.py           # assemble index.html, update the CSP hash, version and cache name
     python3 tools/build.py --check   # verify only; exits 1 if anything is out of date or unsafe
 
 What it does
+  0. Assembles index.html: src/index.html with src/styles.css and the files in JS_FILES (in that
+     order) inlined. The JS files share one scope, exactly as if they were one script.
   1. Recomputes the sha256 hash of the inline <script> and writes it into the Content-Security-Policy.
      If this hash is wrong the browser refuses to run the app and you get a blank screen.
   2. Bumps the app version (const VER='1.4' -> '1.5', shown in the app as v1.5) whenever the app
@@ -23,6 +28,41 @@ import base64, hashlib, pathlib, re, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 INDEX, SW = ROOT / "index.html", ROOT / "sw.js"
+SRC = ROOT / "src"
+VERSION_FILE = SRC / "js" / "version.js"
+# Load order matters: each file may use what the files above it define at load time.
+JS_FILES = [
+    "version.js",              # the app version (written by this build)
+    "core/dom.js",             # tiny DOM and formatting helpers
+    "core/storage.js",         # localStorage (prefixed) and IndexedDB
+    "core/training.js",        # the training maths: e1RM, strength, suggestions, next-set adjustment
+    "core/state.js",           # app state, loading data, plans, building a workout
+    "core/rest-timer.js",      # rest timer between sets
+    "views/common.js",         # shared bits of UI (icons, RIR picker, page titles)
+    "views/exercise-search.js",
+    "views/train.js",
+    "views/exercises.js",
+    "views/history.js",
+    "views/plans.js",
+    "views/settings.js",
+    "app/navigation.js",       # render(), back gesture
+    "app/events.js",           # input, keyboard, swipe and click handling
+    "app/actions.js",          # what every button does
+    "backup.js",               # export/import and automatic GitHub backup
+    "boot.js",                 # start-up
+]
+
+
+def assemble():
+    """index.html built from src/, before the version, hash and cache name are filled in."""
+    shell, css = (SRC / "index.html").read_text(), (SRC / "styles.css").read_text()
+    js = "\n".join((SRC / "js" / f).read_text().rstrip("\n") for f in JS_FILES)
+    if "</script" in js.lower():
+        fail("src/js must not contain </script")
+    for marker in ("/*@STYLES@*/", "/*@SCRIPT@*/"):
+        if shell.count(marker) != 1:
+            fail(f"src/index.html must contain {marker} exactly once")
+    return shell.replace("/*@STYLES@*/", css.rstrip("\n")).replace("/*@SCRIPT@*/", js)
 
 
 def fail(msg):
@@ -79,7 +119,7 @@ def committed(path):
 def expected_version(html, sw):
     m = VER_RE.search(html)
     if not m or len(VER_RE.findall(html)) != 1:
-        fail("index.html must contain exactly one  const VER='X.Y';")
+        fail("src/js/version.js must contain exactly one  const VER='X.Y';")
     cur = (int(m.group(1)), int(m.group(2)))
     head = {f: committed(f) for f in APP_FILES}
     hm = VER_RE.search(head["index.html"] or "")
@@ -138,7 +178,8 @@ def shell_files(sw):
 
 def main():
     check = "--check" in sys.argv
-    html, sw = INDEX.read_text(), SW.read_text()
+    old_html, sw = INDEX.read_text(), SW.read_text()
+    html = assemble()
     v = expected_version(html, sw)
     html_v = VER_RE.sub(f"const VER='{v[0]}.{v[1]}';", html)
     h, js = script_hash(html_v)
@@ -157,7 +198,9 @@ def main():
     if len(VER_RE.findall(new_sw)) != 1:
         fail("sw.js must contain exactly one  const VER='X.Y';  (read by Check for updates)")
     new_sw = VER_RE.sub(f"const VER='{v[0]}.{v[1]}';", new_sw)   # server-side version = the app's version
-    changed = [n for n, a, b in (("index.html", html, new_html), ("sw.js", sw, new_sw)) if a != b]
+    ver_src = VERSION_FILE.read_text()
+    new_ver_src = VER_RE.sub(f"const VER='{v[0]}.{v[1]}';", ver_src)
+    changed = [n for n, a, b in (("index.html", old_html, new_html), ("sw.js", sw, new_sw), ("src/js/version.js", ver_src, new_ver_src)) if a != b]
     if check:
         if changed:
             fail("out of date: " + ", ".join(changed) + " (run python3 tools/build.py)")
@@ -165,6 +208,7 @@ def main():
         return
     INDEX.write_text(new_html)
     SW.write_text(new_sw)
+    VERSION_FILE.write_text(new_ver_src)
     print(("Updated " + ", ".join(changed)) if changed else "Already up to date", f"| v{v[0]}.{v[1]} | cache", version)
 
 
